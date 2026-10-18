@@ -57,8 +57,8 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
   - End-of-Session Guard: If session terminates while $X > -300\text{ mG}$, purges triggers occurring after arm departure.
 - **Validated Golden Parameters (100 Hz Live & Offline Detection)**:
   - `WINDOW_SIZE = 37` samples ($0.37\text{s}$ at 100 Hz)
-  - `REP_THRESHOLD = 105` mG (start) | `RESET_THRESHOLD = 60` mG (start)
-  - `DEBOUNCE_MIN = 95` samples ($0.95\text{s}$ at 100 Hz) | Cadence-adaptive with ceiling: $\min(130, \max(95, \operatorname{int}(0.55 \cdot \Delta t_{\text{prev}})))$
+  - `REP_THRESHOLD = 105` mG (start) | `RESET_THRESHOLD = 55` mG (start)
+  - `DEBOUNCE_MIN = 80` samples ($0.80\text{s}$ at 100 Hz) | Cadence-adaptive with ceiling: $\min(130, \max(80, \operatorname{int}(0.55 \cdot \Delta t_{\text{prev}})))$
   - `DEBOUNCE_MAX = 130` samples ($1.30\text{s}$ at 100 Hz, protects against post-rest-pause lockouts)
   - `COOLDOWN_TIMEOUT = 100` samples ($1.00\text{s}$ at 100 Hz)
   - `MIN_WAVE_DURATION = 45` samples ($0.45\text{s}$ at 100 Hz)
@@ -94,14 +94,14 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
 ---
 
 ## 5. Dataset & Benchmark Performance
-- **Active Dataset**: 41 verified `.fit` workout sets in `data/` (including 4 newest sets recorded live on Garmin Forerunner 165 Music).
+- **Active Dataset**: 50 verified `.fit` workout sets in `data/`.
 - **Benchmark Metrics (`eval_pipeline.py`)**:
-  - **Exact Match Accuracy**: **32 / 41 (78.0%)**
-  - **Within-1 ($\pm 1$ Rep) Accuracy**: **39 / 41 (95.1%)**
-  - **Mean Absolute Error (MAE)**: **0.268 reps/set**
-  - **Mean Signed Error (Bias)**: **+0.024 reps/set**
-  - **Error Distribution**: Exact=32, Undercount=4, Overcount=5
-  - **Detector/Simulator Parity**: **41 / 41 (100.0% Exact Match)** between Monkey C `PullUpDetector.mc` and Python `eval_pipeline.py`.
+  - **Exact Match Accuracy**: **36 / 50 (72.0%)**
+  - **Within-1 ($\pm 1$ Rep) Accuracy**: **49 / 50 (98.0%)**
+  - **Mean Absolute Error (MAE)**: **0.300 reps/set**
+  - **Mean Signed Error (Bias)**: **-0.020 reps/set** (Net: -1 rep across 429 total reps)
+  - **Error Distribution**: Exact=36, Undercount=7, Overcount=7
+  - **Detector/Simulator Parity**: **50 / 50 (100.0% Exact Match)** between Monkey C `PullUpDetector.mc` and Python `eval_pipeline.py`.
 
 ---
 

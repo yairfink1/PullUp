@@ -56,7 +56,7 @@ class PullUpDetector {
 
     // Calibration constants (sample-rate independent mG levels and sample window).
     private const BASE_REP_THRESHOLD      as Number = 105;
-    private const BASE_RESET_THRESHOLD    as Number = 60;
+    private const BASE_RESET_THRESHOLD    as Number = 55;
     private const MOUNT_EXIT_ENV          as Number = 70;
     private const HIGH_MAG_LEVEL          as Number = 1900; // mG
     private const X_RELEASE_THRESHOLD     as Number = -300; // mG
@@ -66,7 +66,7 @@ class PullUpDetector {
     private var _sampleRate as Number = 100;
 
     // Scaled sample thresholds (calibrated to 100 Hz baseline).
-    private var _debounceMin            as Number = 95;  // 0.95s
+    private var _debounceMin            as Number = 80;  // 0.80s
     private var _debounceMax            as Number = 130; // 1.30s
     private var _cooldownTimeoutSamples as Number = 100; // 1.00s
     private var _dismountLockoutSamples as Number = 50;  // 0.50s
@@ -139,7 +139,7 @@ class PullUpDetector {
         // Scale factors relative to 100 Hz baseline.
         var rateScale = _sampleRate.toFloat() / 100.0;
 
-        _debounceMin = (95 * rateScale).toNumber();
+        _debounceMin = (80 * rateScale).toNumber();
         if (_debounceMin < 5) { _debounceMin = 5; }
 
         _debounceMax = (130 * rateScale).toNumber();

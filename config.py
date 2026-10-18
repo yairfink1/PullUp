@@ -26,7 +26,7 @@ REP_THRESHOLD: int = 105
 
 # Starting envelope level (mG) that must be reached again after a peak
 # before a rep candidate can be confirmed (valley clearance).
-RESET_THRESHOLD: int = 60
+RESET_THRESHOLD: int = 55
 
 # ---------------------------------------------------------------------------
 # Adaptive Threshold Floors (kick in after rep >= 4)
@@ -48,9 +48,9 @@ ADAPTIVE_RESET_FLOOR_MAX: int = 55
 # ---------------------------------------------------------------------------
 # Base cadence-adaptive debounce floor (samples).  For rep >= 2 this grows
 # to min(DEBOUNCE_MAX, max(DEBOUNCE_MIN, int(0.55 * dt_prev))).
-# Set to 95 samples (0.95 s) to align with human physical minimum cadence
-# and eliminate 0.88s - 0.90s body drop rebound false triggers.
-DEBOUNCE_MIN: int = 95          # 0.95 s
+# Set to 80 samples (0.80 s) to permit fast initial pull-up reps (0.78s-0.85s cadence)
+# while eliminating body drop rebound false triggers via reset threshold.
+DEBOUNCE_MIN: int = 80          # 0.80 s
 
 # Maximum ceiling on cadence-adaptive debounce (samples @ 100 Hz).
 # Prevents long rest-pauses on the bar (> 2.5s) from locking out subsequent reps.
