@@ -1,0 +1,35 @@
+# Garmin Connect IQ Build Artifacts
+bin/
+*.prg
+*.iq
+*.bin
+*.debug.xml
+*.mbc
+mir/
+internal-mir/
+gen/
+
+# Private developer key (NEVER commit signing keys)
+developer_key*
+*.der
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+.env/
+
+# Scratch & runtime logs
+scratch/
+*.log
+capture_status.txt
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

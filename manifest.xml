@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
+
+  <iq:application
+    entry="PullUpApp"
+    id="93ef5a4f-b4fb-4e3b-bc44-88b2c8af9403"
+    launcherIcon="@Drawables.LauncherIcon"
+    minApiLevel="5.0.0"
+    name="@Strings.AppName"
+    type="watch-app"
+    version="1.0.0">
+
+    <!-- Supported modern round devices (CIQ 5.0+) -->
+    <iq:products>
+      <!-- Forerunner Series -->
+      <iq:product id="fr165"/>
+      <iq:product id="fr165m"/>
+      <iq:product id="fr170"/>
+      <iq:product id="fr170m"/>
+      <iq:product id="fr70"/>
+      <iq:product id="fr255"/>
+      <iq:product id="fr255m"/>
+      <iq:product id="fr255s"/>
+      <iq:product id="fr255sm"/>
+      <iq:product id="fr265"/>
+      <iq:product id="fr265s"/>
+      <iq:product id="fr57042mm"/>
+      <iq:product id="fr57047mm"/>
+      <iq:product id="fr955"/>
+      <iq:product id="fr965"/>
+      <iq:product id="fr970"/>
+
+      <!-- Fenix & Epix Series -->
+      <iq:product id="fenix7"/>
+      <iq:product id="fenix7pro"/>
+      <iq:product id="fenix7s"/>
+      <iq:product id="fenix7spro"/>
+      <iq:product id="fenix7x"/>
+      <iq:product id="fenix7xpro"/>
+      <iq:product id="fenix843mm"/>
+      <iq:product id="fenix847mm"/>
+      <iq:product id="fenix8solar47mm"/>
+      <iq:product id="fenix8solar51mm"/>
+      <iq:product id="fenixe"/>
+      <iq:product id="epix2"/>
+      <iq:product id="epix2pro42mm"/>
+      <iq:product id="epix2pro47mm"/>
+      <iq:product id="epix2pro51mm"/>
+
+      <!-- Venu & Vivoactive Series -->
+      <iq:product id="venu2"/>
+      <iq:product id="venu2plus"/>
+      <iq:product id="venu2s"/>
+      <iq:product id="venu3"/>
+      <iq:product id="venu3s"/>
+      <iq:product id="vivoactive5"/>
+    </iq:products>
+
+    <!-- Required permissions -->
+    <iq:permissions>
+      <iq:uses-permission id="Sensor"/>
+      <iq:uses-permission id="Fit"/>
+      <iq:uses-permission id="FitContributor"/>
+      <iq:uses-permission id="SensorLogging"/>
+    </iq:permissions>
+
+    <!-- Supported languages -->
+    <iq:languages>
+      <iq:language>eng</iq:language>
+    </iq:languages>
+
+  </iq:application>
+
+</iq:manifest>

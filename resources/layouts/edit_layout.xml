@@ -1,0 +1,7 @@
+﻿<?xml version="1.0"?>
+<!--
+    Edit / confirmation screen layout.
+    PullUpEditView draws all text directly onto the Graphics.Dc in onUpdate.
+-->
+<layout id="EditLayout">
+</layout>

@@ -1,0 +1,32 @@
+{
+  "datafields" : [ {
+    "id" : 0,
+    "chart-visible" : false,
+    "activity-visible" : true,
+    "lap-visible" : false,
+    "chart-title-key" : null,
+    "label-key" : "FitTotalRepsLabel",
+    "unit-label-key" : "FitUnitsLabel",
+    "sort-order" : 0,
+    "precision" : 0,
+    "fill-color" : null
+  }, {
+    "id" : 1,
+    "chart-visible" : false,
+    "activity-visible" : false,
+    "lap-visible" : true,
+    "chart-title-key" : null,
+    "label-key" : "FitSetRepsLabel",
+    "unit-label-key" : "FitUnitsLabel",
+    "sort-order" : 1,
+    "precision" : 0,
+    "fill-color" : null
+  } ],
+  "strings" : {
+    "default" : {
+      "FitTotalRepsLabel" : "Total Reps",
+      "FitUnitsLabel" : "reps",
+      "FitSetRepsLabel" : "Set Reps"
+    }
+  }
+}

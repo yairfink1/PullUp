@@ -1,0 +1,6 @@
+﻿<?xml version="1.0"?>
+<resources>
+  <!-- Launcher icon displayed in the Garmin Connect IQ store and device app list.
+       PNG must be 70x70 px. -->
+  <bitmap id="LauncherIcon" filename="launcher_icon.png"/>
+</resources>

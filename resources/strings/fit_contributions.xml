@@ -1,0 +1,17 @@
+<resources>
+    <fitContributions>
+        <fitField id="0"
+                  displayInActivitySummary="true"
+                  sortOrder="0"
+                  precision="0"
+                  dataLabel="@Strings.FitTotalRepsLabel"
+                  unitLabel="@Strings.FitUnitsLabel" />
+        <fitField id="1"
+                  displayInActivitySummary="true"
+                  displayInActivityLaps="true"
+                  sortOrder="1"
+                  precision="0"
+                  dataLabel="@Strings.FitSetRepsLabel"
+                  unitLabel="@Strings.FitUnitsLabel" />
+    </fitContributions>
+</resources>

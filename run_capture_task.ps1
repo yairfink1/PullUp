@@ -1,0 +1,1 @@
+﻿& "C:\Users\TLP-001\Documents\Garmin\PullUp\capture_screenshot.ps1" -Down -OutputPath "C:\Users\TLP-001\Documents\Garmin\PullUp\simulator_view.png" -StatusFile "C:\Users\TLP-001\Documents\Garmin\PullUp\capture_status.txt" *>&1 | Out-File "C:\Users\TLP-001\Documents\Garmin\PullUp\capture_debug.log" -Encoding utf8

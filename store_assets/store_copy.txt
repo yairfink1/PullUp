@@ -1,0 +1,78 @@
+================================================================================
+THE AMAZING PULL UP - CONNECT IQ STORE LISTING
+================================================================================
+
+APP TITLE:
+The Amazing Pull Up - Workout & Reps
+
+APP TYPE:
+Watch App
+
+CATEGORY:
+Fitness & Gym / Sports
+
+SHORT DESCRIPTION / TAGLINE:
+Automatic 100 Hz pull-up rep counter, multi-set rest timer & progress tracker. 100% Free!
+
+================================================================================
+IMAGE SPECIFICATIONS & ASSETS READY FOR UPLOAD:
+================================================================================
+1. COVER IMAGE / APP ICON:
+   - File: store_assets/cover_image_500x500.png (or cover_image_500x500.jpg)
+   - Dimensions: 500 x 500 px
+   - Size: ~49 KB (Required: < 300 KB) - PASS
+
+2. HERO PROMOTIONAL BANNER:
+   - File: store_assets/hero_banner_1440x720.jpg
+   - Dimensions: 1440 x 720 px
+   - Size: ~308 KB (Required: < 2048 KB) - PASS
+
+================================================================================
+FULL STORE DESCRIPTION (Copy & paste into Garmin Developer Dashboard):
+================================================================================
+Elevate your pull-up training with The Amazing Pull Up!
+
+Tired of having to manually tap your watch or losing count mid-set? The Amazing Pull Up uses high-frequency 100 Hz accelerometer motion processing to count your pull-ups automatically and accurately live on your wrist, saving you the burden of entering reps manually.
+
+Whether you're doing "grease the groove" sets throughout the day or full calisthenics sessions, this app makes sure every single rep counts.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY HIGHLIGHTS & FEATURES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. AUTOMATIC & ACCURATE REP COUNTING
+Advanced 100 Hz sensor technology automatically identifies each repetition and chin-over-bar inflection. It ignores setup and mounting shakes, so you can just jump on the bar and pull without pressing extra buttons.
+
+2. TRACK YOUR PROGRESS
+Effortlessly log every repetition you perform. Watch your daily and 7-day volume grow over time and see the physical results of your hard work.
+
+3. 100% FREE TO USE
+No paywalls, no subscriptions, and no trial expirations. A completely free tool built for the calisthenics and fitness community.
+
+4. BUILD CONSISTENCY & GET STRONGER
+Consistency is the #1 key to pull-up strength. The app provides clear daily feedback that motivates you to stay consistent with your training day after day, ensuring you steadily get stronger.
+
+5. FLEXIBLE MODES: QUICK SETS OR STRUCTURED WORKOUTS
+• Single Quick Set: Hop on the bar for a quick standalone set whenever you pass by—ideal for grease-the-groove training.
+• Multi-Set Workout: Complete multiple sets back-to-back with dedicated rest timers between sets to keep your training structured.
+
+6. SPURS YOU TO BEAT YOUR RECORDS
+Tracks your all-time Personal Records across 3 categories:
+• Best Single Set (Most reps in 1 set)
+• Best Day (Highest total reps in a day)
+• Best Week (Highest total reps in a week)
+When you beat a personal record, the app congratulates you with a celebratory gold screen and celebratory vibration pulse!
+
+7. MINIMALIST WIDGET GLANCE
+Quickly check your current daily and weekly totals in a split second right from the Garmin glance carousel without even opening the full app.
+
+8. GARMIN CONNECT FIT SYNC
+Saves your sessions directly to Garmin Connect as Strength Training activities with developer rep fields visible in your Garmin Connect activity stats.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SUPPORT INDEPENDENT DEVELOPMENT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+This app is completely free. If you enjoy using it and it helps you achieve your fitness goals, consider supporting future development:
+Buy Me a Coffee: https://buymeacoffee.com/yair.garmin
+
+Have feedback, questions, or ideas? Please leave a rating or reach out via "Contact Developer"!

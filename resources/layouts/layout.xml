@@ -1,0 +1,8 @@
+﻿<?xml version="1.0"?>
+<!--
+    Main watch-face layout for the Forerunner 165 (390x390 AMOLED).
+    PullUpView draws all text directly onto the Graphics.Dc in onUpdate,
+    so this file acts as a named layout placeholder only.
+-->
+<layout id="WatchFace">
+</layout>
