@@ -146,8 +146,8 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
 - **Quick Screen Capture Tool**:
   - [`capture_screenshot.ps1`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/capture_screenshot.ps1) / `run_sim_screenshot.ps1`: DPI-aware desktop capture helper for UI audit.
 - **App IDs & Dual-Release Architecture**:
-  - **Production App ID (`93ef5a4f-b4fb-4e3b-bc44-88b2c8af9403`)**: Used for the public store release on `main`.
-  - **Beta App ID (`dc88e1e6-1c52-410d-8528-10cf3df254f2`)**: Used for live device testing on `beta`. Displays a distinct "BETA" badge on launcher icon and titles the app `"Pull Ups (Beta)"`.
+  - **Production App ID (`dc88e1e6-1c52-410d-8528-10cf3df254f2`)**: Used for the public store release on `main`.
+  - **Beta App ID (`93ef5a4f-b4fb-4e3b-bc44-88b2c8af9403`)**: Used for live device testing on `beta`. Displays a distinct "BETA" badge on launcher icon and titles the app `"Pull Ups (Beta)"`.
   - Both apps can be installed side-by-side on your watch simultaneously with zero storage collision!
 - **Build Commands**:
   - **Build Beta (`bin/PullUp-Beta.prg` or `.iq`)**:
