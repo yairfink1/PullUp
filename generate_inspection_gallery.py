@@ -158,9 +158,30 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
         axes[0].legend(loc="upper right", fontsize=8, ncol=4)
 
         # --------------------------------------------------------------------
-        # Subplot 2 (Middle): Causal Envelope & Rep Detection
+        # Subplot 2 (Middle): Causal Envelope, Smoothed Y-Axis Tilt & Rep Detection
         # --------------------------------------------------------------------
-        axes[1].plot(time_s, envelopes, color="#0056b3", lw=1.4, label="Movement Envelope (37-sample MA)")
+        tilt_win = 25
+        y_smooth = np.zeros(n_samples, dtype=np.int32)
+        y_buf = [0] * tilt_win
+        yz_idx = 0
+        y_sum = 0
+        for i in range(n_samples):
+            cy = int(y[i])
+            y_sum += cy - y_buf[yz_idx]
+            y_buf[yz_idx] = cy
+            yz_idx = (yz_idx + 1) % tilt_win
+            y_smooth[i] = y_sum // tilt_win
+
+        axes[1].axhline(0, color="gray", linestyle=":", lw=0.8, alpha=0.6)
+        axes[1].plot(
+            time_s,
+            y_smooth,
+            color="#2ca02c",
+            lw=1.5,
+            alpha=0.9,
+            label="Smoothed Y-Axis Wrist Tilt (25-sample MA)",
+        )
+        axes[1].plot(time_s, envelopes, color="#0056b3", lw=1.5, label="Movement Envelope (37-sample MA)")
         axes[1].plot(time_s, rep_th_hist, color="crimson", linestyle="-", lw=1.3, label=f"Adaptive REP Threshold (start {CONFIG['rep_threshold']} mG)")
         axes[1].plot(time_s, reset_th_hist, color="forestgreen", linestyle="--", lw=1.3, label=f"Adaptive RESET Threshold (start {CONFIG['reset_threshold']} mG)")
 
@@ -196,11 +217,16 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
             axes[1].plot(t_n, env_val, marker="v", markersize=7, color="gray", zorder=5)
             axes[1].text(t_n, env_val + 14, "TWITCH", ha="center", va="bottom", fontsize=8, fontweight="bold", color="gray")
 
-        axes[1].set_ylabel("Envelope (mG)", fontsize=10, fontweight="bold")
-        axes[1].set_title("2. Causal Movement Envelope & State Triggers", fontsize=11, fontweight="bold")
-        axes[1].set_ylim(0, max(300, np.max(envelopes) + 60))
+        s_bound = settle_idx if settle_idx is not None else 0
+        e_bound = dismount_idx if dismount_idx is not None else n_samples
+        in_set_y = y_smooth[s_bound:e_bound] if e_bound > s_bound else y_smooth
+        y_min_bound = min(-250, int(np.min(in_set_y)) - 40)
+        y_max_bound = max(320, int(np.max(envelopes)) + 60, int(np.max(in_set_y)) + 50)
+        axes[1].set_ylabel("Envelope / Y-Tilt (mG)", fontsize=10, fontweight="bold")
+        axes[1].set_title("2. Causal Movement Envelope, Smoothed Y-Axis Tilt (PushUp-Style) & State Triggers", fontsize=11, fontweight="bold")
+        axes[1].set_ylim(y_min_bound, y_max_bound)
         axes[1].grid(True, linestyle=":", alpha=0.5)
-        axes[1].legend(loc="upper right", fontsize=8, ncol=4)
+        axes[1].legend(loc="upper right", fontsize=8, ncol=3)
 
         # --------------------------------------------------------------------
         # Subplot 3 (Bottom): Raw 3-Axis Components (Directional Orientation)
@@ -220,12 +246,20 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
         axes[2].set_xlim(0, duration_s)
         axes[2].legend(loc="upper right", fontsize=8, ncol=5)
 
-        # Save plot
+        # Save plot (with brief retry for transient Windows file-sync locks)
         base_name = os.path.splitext(fname)[0]
         out_fname = f"{idx:02d}_{status}_{base_name}_T{true_reps}_D{det_reps}.png"
         out_path = os.path.join(gallery_path, out_fname)
         plt.tight_layout(rect=[0, 0.02, 1, 0.96])
-        plt.savefig(out_path, dpi=120)
+        for attempt in range(5):
+            try:
+                plt.savefig(out_path, dpi=120)
+                break
+            except OSError:
+                if attempt == 4:
+                    raise
+                import time
+                time.sleep(0.3)
         plt.close()
 
     print(f"Successfully generated all {len(dataset)} diagnostic cards in: {gallery_path}\n")
