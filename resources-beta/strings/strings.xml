@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<strings>
+    <!-- Application name shown in the launcher for BETA testing -->
+    <string id="AppName">Pull Ups (Beta)</string>
+    <string id="AppTitle">PULL UP BETA</string>
+
+    <!-- Main screen status labels -->
+    <string id="StatusIdle">Press START</string>
+    <string id="StatusRecording">RECORDING...</string>
+    <string id="StatusStopped">STOPPED</string>
+
+    <!-- Edit / confirmation screen -->
+    <string id="LabelSetComplete">SET COMPLETE</string>
+    <string id="LabelReps">REPS</string>
+    <string id="LabelAdjustHint">UP / DOWN to adjust</string>
+    <string id="LabelSaveHint">START = Save   BACK = Discard</string>
+
+    <!-- FitContributor developer fields -->
+    <string id="FitTotalRepsLabel">Total Reps</string>
+    <string id="FitSetRepsLabel">Set Reps</string>
+    <string id="FitUnitsLabel">reps</string>
+
+    <!-- Multi-Set Workout strings -->
+    <string id="TitleMultiSet">MULTI-SET</string>
+    <string id="LabelRest">REST</string>
+    <string id="LabelFinishWorkout">Finish Workout</string>
+</strings>
