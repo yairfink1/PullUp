@@ -40,6 +40,7 @@ from config import (
     X_LATCH_STREAK_LEN,
     CANCEL_PRIOR_WINDOW,
     HANG_STREAK_REQ,
+    MOUNT_EXIT_ENV,
 )
 
 
@@ -154,6 +155,7 @@ def load_dataset(data_dir: str, workspace_dir: str) -> Tuple[List[Dict[str, Any]
     MANUAL_LABELS = {
         "2026-09-21-21-15-13.fit": (4, "Manual inspection (suspect 2)"),
         "2026-09-21-21-15-39.fit": (5, "Manual inspection (suspect 3)"),
+        "2026-10-19-17-33-50.fit": (13, "User confirmation (13 reps)"),
     }
 
     for path in fit_paths:
@@ -259,7 +261,8 @@ def simulate_pullup_online(envelopes: np.ndarray,
                            x_release_threshold: int = X_RELEASE_THRESHOLD,
                            x_latch_streak_len: int = X_LATCH_STREAK_LEN,
                            cancel_prior_window: int = CANCEL_PRIOR_WINDOW,
-                           hang_streak_req: int = HANG_STREAK_REQ) -> List[int]:
+                           hang_streak_req: int = HANG_STREAK_REQ,
+                           mount_exit_env: int = MOUNT_EXIT_ENV) -> List[int]:
     """
     Simulates the Hybrid v2 Combined online repetition detection state machine:
       STATE_MOUNT_SETTLING (-1) -> STATE_READY_TO_ARM (0) -> STATE_ARMED (1) -> STATE_COOLDOWN (2)
@@ -435,7 +438,7 @@ def simulate_pullup_online(envelopes: np.ndarray,
         if state == -1:  # STATE_MOUNT_SETTLING
             if has_hung:
                 in_hang_time = i - hang_start
-                settled_below = (cur_envelope < 70)
+                settled_below = (cur_envelope < mount_exit_env)
                 timed_out = (in_hang_time >= 130)
                 if (settled_below or timed_out) and x_in_hang:
                     state = 0  # Transition to READY_TO_ARM
@@ -554,7 +557,8 @@ def evaluate_dataset(dataset: List[Dict[str, Any]],
                      x_release_threshold: int = X_RELEASE_THRESHOLD,
                      x_latch_streak_len: int = X_LATCH_STREAK_LEN,
                      cancel_prior_window: int = CANCEL_PRIOR_WINDOW,
-                     hang_streak_req: int = HANG_STREAK_REQ) -> Dict[str, Any]:
+                     hang_streak_req: int = HANG_STREAK_REQ,
+                           mount_exit_env: int = MOUNT_EXIT_ENV) -> Dict[str, Any]:
     """
     Runs the online detector with given parameters across all dataset files
     and aggregates accuracy metrics.
@@ -597,7 +601,8 @@ def evaluate_dataset(dataset: List[Dict[str, Any]],
             x_release_threshold=x_release_threshold,
             x_latch_streak_len=x_latch_streak_len,
             cancel_prior_window=cancel_prior_window,
-            hang_streak_req=hang_streak_req
+            hang_streak_req=hang_streak_req,
+            mount_exit_env=mount_exit_env
         )
         detected_count = len(rep_indices)
         true_count = item["true_reps"]

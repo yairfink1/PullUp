@@ -56,6 +56,7 @@ def simulate_with_trace(
     x_latch_streak = config.get("x_latch_streak_len", 35)
     cancel_prior_window = config.get("cancel_prior_window", 25)
     hang_streak_req = config.get("hang_streak_req", 35)
+    mount_exit_env = config.get("mount_exit_env", 92)
 
     state = -1  # STATE_MOUNT_SETTLING
     debounce_cur = deb_min
@@ -230,8 +231,8 @@ def simulate_with_trace(
         if state == -1:  # STATE_MOUNT_SETTLING
             if has_hung:
                 in_hang_time = i - hang_start
-                # Exit as soon as envelope drops below 70 mG OR hard timeout of 1.3s (130 samples) in hang
-                settled_below = (cur_envelope < 70)
+                # Exit as soon as envelope drops below mount_exit_env (92 mG) OR hard timeout of 1.3s (130 samples) in hang
+                settled_below = (cur_envelope < mount_exit_env)
                 timed_out = (in_hang_time >= 130)
                 if (settled_below or timed_out) and x_in_hang:
                     state = 0  # Transition to READY_TO_ARM
@@ -368,6 +369,7 @@ def extract_true_reps(fit_path: str) -> Optional[int]:
     manual_labels = {
         "2026-09-21-21-15-13.fit": 4,
         "2026-09-21-21-15-39.fit": 5,
+        "2026-10-19-17-33-50.fit": 13,
     }
     if fname in manual_labels:
         return manual_labels[fname]

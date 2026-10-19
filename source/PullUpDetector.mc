@@ -20,7 +20,7 @@ import Toybox.System;
 //          * Active hang detection: X in [-1300, -700] mG for >= 35 samples (0.35s).
 //          * Pre-first-rep mount shockwave re-entry guard: if _repCount == 0 and
 //            curEnvelope >= 355 mG, re-enter STATE_MOUNT_SETTLING.
-//          * Exit to STATE_READY_TO_ARM as soon as envelope < 70 mG OR after
+//          * Exit to STATE_READY_TO_ARM as soon as envelope < 92 mG OR after
 //            hard ceiling timeout of 130 samples (1.3s) in hang.
 //      - State 0: STATE_READY_TO_ARM
 //          * Arms to State 1 when valley_cleared is satisfied and envelope crosses
@@ -60,7 +60,7 @@ class PullUpDetector {
     // Calibration constants (sample-rate independent mG levels and buffer sizes).
     private const BASE_REP_THRESHOLD      as Number = 105;
     private const BASE_RESET_THRESHOLD    as Number = 55;
-    private const MOUNT_EXIT_ENV          as Number = 70;
+    private const MOUNT_EXIT_ENV          as Number = 92;
     private const MOUNT_SHOCK_REENTRY_ENV as Number = 355;
     private const HIGH_MAG_LEVEL          as Number = 1900; // mG
     private const X_RELEASE_THRESHOLD     as Number = -300; // mG

@@ -63,6 +63,9 @@ WARMUP_SAMPLES: int = 200       # 2.0 s
 # envelope has fallen below REP_THRESHOLD.
 COOLDOWN_TIMEOUT_SAMPLES: int = 100   # 1.0 s
 
+# Envelope level (mG) below which the detector exits mount settling into READY_TO_ARM.
+MOUNT_EXIT_ENV: int = 92        # mG
+
 # Minimum width of the movement wave (samples) for a candidate to be
 # confirmed as a true rep (rejects narrow twitches < 0.45 s).
 MIN_WAVE_DURATION: int = 45     # 0.45 s
@@ -104,4 +107,5 @@ DETECTOR_CONFIG: dict = {
     "x_latch_streak_len":        X_LATCH_STREAK_LEN,
     "cancel_prior_window":       CANCEL_PRIOR_WINDOW,
     "hang_streak_req":           HANG_STREAK_REQ,
+    "mount_exit_env":            MOUNT_EXIT_ENV,
 }
