@@ -145,11 +145,21 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
     * `data/2026-10-04-14-53-47.fit`: True Reps: 15 | Offline Reps: 14 | Simulator Live Reps: 14 | Sim Output Activity FIT: 14 reps (**100% Parity**).
 - **Quick Screen Capture Tool**:
   - [`capture_screenshot.ps1`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/capture_screenshot.ps1) / `run_sim_screenshot.ps1`: DPI-aware desktop capture helper for UI audit.
-- **Build Target**: `fr165m`
-  - Build:
-    `& "$env:APPDATA\Garmin\ConnectIQ\Sdks\connectiq-sdk-win-9.2.0-2026-06-09-92a1605b2\bin\monkeyc.bat" -d fr165m -f monkey.jungle -o bin/PullUp.prg -y developer_key`
-  - Export production bundle:
-    `& "$env:APPDATA\Garmin\ConnectIQ\Sdks\connectiq-sdk-win-9.2.0-2026-06-09-92a1605b2\bin\monkeyc.bat" -e -f monkey.jungle -o bin/PullUp.iq -y developer_key`
+- **App IDs & Dual-Release Architecture**:
+  - **Production App ID (`93ef5a4f-b4fb-4e3b-bc44-88b2c8af9403`)**: Used for the public store release on `main`.
+  - **Beta App ID (`dc88e1e6-1c52-410d-8528-10cf3df254f2`)**: Used for live device testing on `beta`. Displays a distinct "BETA" badge on launcher icon and titles the app `"Pull Ups (Beta)"`.
+  - Both apps can be installed side-by-side on your watch simultaneously with zero storage collision!
+- **Build Commands**:
+  - **Build Beta (`bin/PullUp-Beta.prg` or `.iq`)**:
+    ```powershell
+    powershell -File .\build_beta.ps1 -Target prg
+    powershell -File .\build_beta.ps1 -Target iq
+    ```
+  - **Build Production (`bin/PullUp.prg` or `.iq`)**:
+    ```powershell
+    powershell -File .\build_prod.ps1 -Target prg
+    powershell -File .\build_prod.ps1 -Target iq
+    ```
 - **Code Standards**:
   - Encoding: UTF-8 without BOM.
   - Line endings: LF.
@@ -157,10 +167,13 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
 
 ---
 
-## 8. Git Repository Integration & Workflow
+## 8. Git Repository Integration & Dual-Branch Workflow
 
 - **Isolated Repository**: `PullUp` is configured as an independent Git repository located at `c:\Users\TLP-001\Documents\Garmin\PullUp`.
-- **Primary Branch**: `main`.
+- **Branch Hierarchy**:
+  - `feat/*`: Topic / feature branches for new development or tuning (e.g. `feat/hybrid-v2-combined`).
+  - `beta`: The active staging branch. Features merge here first $\to$ build and test `bin/PullUp-Beta.prg` on watch.
+  - `main`: The public production release. Merged from `beta` after live workout verification $\to$ build `bin/PullUp.iq` for store release.
 - **Security & Build Exclusions (`.gitignore`)**:
   - **Signing Keys**: `developer_key*`, `*.der`, `*.pem`, `*.key` are strictly ignored and must NEVER be committed.
   - **Binaries & Packages**: `bin/`, `*.prg`, `*.iq`, `*.bin`.
