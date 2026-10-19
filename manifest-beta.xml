@@ -3,7 +3,7 @@
 
   <iq:application
     entry="PullUpApp"
-    id="93ef5a4f-b4fb-4e3b-bc44-88b2c8af9403"
+    id="a3d8b1c2-e4f5-6789-abcd-ef0123456789"
     launcherIcon="@Drawables.LauncherIcon"
     minApiLevel="5.0.0"
     name="@Strings.AppName"
