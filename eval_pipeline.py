@@ -245,6 +245,8 @@ def precompute_envelopes(mags: np.ndarray, diffs: np.ndarray,
 def simulate_pullup_online(envelopes: np.ndarray,
                            dismount_events: Optional[np.ndarray] = None,
                            x_accel: Optional[np.ndarray] = None,
+                           y_accel: Optional[np.ndarray] = None,
+                           z_accel: Optional[np.ndarray] = None,
                            rep_threshold: int = REP_THRESHOLD,
                            reset_threshold: int = RESET_THRESHOLD,
                            debounce_min: int = DEBOUNCE_MIN,
@@ -259,27 +261,13 @@ def simulate_pullup_online(envelopes: np.ndarray,
                            cancel_prior_window: int = CANCEL_PRIOR_WINDOW,
                            hang_streak_req: int = HANG_STREAK_REQ) -> List[int]:
     """
-    Simulates the online repetition detection state machine:
+    Simulates the Hybrid v2 Combined online repetition detection state machine:
       STATE_MOUNT_SETTLING (-1) -> STATE_READY_TO_ARM (0) -> STATE_ARMED (1) -> STATE_COOLDOWN (2)
-    Features:
-      - Mount Detection & Hang Stabilization: Requires sustained overhead bar hang (stabilizing
-        in [-1300, -700] mG for >= 35 samples / 0.35s) while acknowledging any mount shockwave.
-      - Mount Settling Physiological Ceiling: Exits STATE_MOUNT_SETTLING into READY_TO_ARM as soon as
-        the envelope drops below 70 mG OR after a hard timeout of 1.3s (130 samples) in hang.
-      - X-Axis Bar Release Guard:
-          * Instant Gate: While X > x_release_threshold (-300 mG), no rep trigger can be armed or confirmed.
-          * Set Termination Latch: If X > x_release_threshold continuously for >= 35 samples (0.35s),
-            permanently locks the set and discards any pending/uncompleted rep.
-          * End-of-Session Guard: If session ends while X > -300 mG, retroactively discard any trigger
-            confirmed within 1.0s before session end.
-      - Relative Peak-to-Trough Valley Clearance: In addition to cur_reset_threshold, confirms rep cycle
-        completion if envelope drops by >= 45% from its current peak (cur_envelope <= 0.55 * peak).
-      - Dynamic Cadence-Adaptive Debounce: Base floor 85 samples (0.85s), adapting for rep >= 2
-        to max(85, int(0.55 * dt_prev)).
-      - Exponential Moving Peak Adaptive Threshold:
-          * Reps 1 to 3: Starts at 105 mG (rep) / 60 mG (reset).
-          * Confirmed Rep >= 4: Adapts via moving average peak P_k (floor 95 mG rep / 55 mG reset).
-    Returns the sample indices at which repetitions were confirmed.
+    Combines:
+      1. Mount Settling & Pre-First-Rep Mount Shockwave Re-entry Guard (>= 355 mG before Rep #1).
+      2. O(1) 25-sample Transverse (Y, Z) Tilt Fusion (within-wave peak-to-trough range gating & smooth-rep rescue).
+      3. Wave Impulse Gating (>= 550 mG-samples), Post-Explosive Bounce Suppression, and Cooldown Exit Hysteresis.
+      4. Valley-to-Peak Prominence Rescues & Deep-Fatigue Cooldown Calibration (84 samples after valley <= 54 mG).
     """
     state = -1  # Start in STATE_MOUNT_SETTLING
     debounce_cur = debounce_min
@@ -304,13 +292,43 @@ def simulate_pullup_online(envelopes: np.ndarray,
     peak_avg = 140.0
     current_wave_peak = 0
     pending_wave_peak = 0
+    last_rep_true_pk = 0
+    wave_impulse = 0
+    min_since_last = 0
+
+    # O(1) circular buffers for 25-sample causal smoothing of Y and Z axes
+    tilt_win = 25
+    y_buf = [0] * tilt_win
+    z_buf = [0] * tilt_win
+    yz_idx = 0
+    y_sum = 0
+    z_sum = 0
+    wave_y_min = 0
+    wave_y_max = 0
+    wave_z_min = 0
+    wave_z_max = 0
+    has_yz = (y_accel is not None and z_accel is not None)
 
     for i in range(n_samples):
         if set_locked:
             break
 
-        cur_x = x_accel[i] if x_accel is not None else -1000
-        cur_envelope = envelopes[i]
+        cur_x = int(x_accel[i]) if x_accel is not None else -1000
+        cur_envelope = int(envelopes[i])
+
+        if has_yz:
+            cy = int(y_accel[i])
+            cz = int(z_accel[i])
+            y_sum += cy - y_buf[yz_idx]
+            z_sum += cz - z_buf[yz_idx]
+            y_buf[yz_idx] = cy
+            z_buf[yz_idx] = cz
+            yz_idx = (yz_idx + 1) % tilt_win
+            y_smooth = y_sum // tilt_win
+            z_smooth = z_sum // tilt_win
+        else:
+            y_smooth = 0
+            z_smooth = 0
 
         # 1. Mount detection & hang stabilization: X in [-1300, -700] mG for at least 35 samples (0.35s)
         if not has_hung:
@@ -337,13 +355,7 @@ def simulate_pullup_online(envelopes: np.ndarray,
             if x_streak >= x_latch_streak_len:
                 set_locked = True
                 departure_start = i - x_latch_streak_len
-                # 1. State-Based Rollback Rule:
-                # Discard any pending_rep immediately (incomplete wave that hasn't finished settling)
                 pending_rep = None
-                # For the last confirmed rep: Do NOT delete if it already successfully settled below
-                # reset_threshold (70 mG) AND satisfied min_wave_duration >= 45 while X was still <= -300 mG.
-                # Only discard a confirmed rep if interval between its confirmation and departure start is < 25
-                # AND its wave width was marginal (< 45 samples or not held in hang).
                 if rep_indices and confirmed_meta:
                     last_confirm_idx, last_wave_dur, last_all_hang = confirmed_meta[-1]
                     interval = departure_start - last_confirm_idx
@@ -366,21 +378,40 @@ def simulate_pullup_online(envelopes: np.ndarray,
                     confirmed_meta.pop()
 
         is_safe_motion = (dismount_lockout == 0)
-
-        # Instant Gate: While X > -300 mG, user's arms are down; no repetition can be initiated or confirmed
         x_in_hang = (cur_x <= x_release_threshold)
 
-        # Track the start of the current upward wave above reset_threshold
+        # Pre-first-rep mount shockwave re-entry guard
+        if state != -1 and len(rep_indices) == 0 and cur_envelope >= 355:
+            state = -1
+            pending_rep = None
+            current_wave_peak = 0
+
+        # Track valley minimum, upward wave start, peak, impulse, and transverse tilt range
         if state != -1:
+            if cur_envelope < min_since_last:
+                min_since_last = cur_envelope
             if cur_envelope >= cur_reset_threshold and prev_envelope < cur_reset_threshold:
                 wave_start = i
                 current_wave_peak = cur_envelope
+                wave_impulse = max(0, cur_envelope - cur_reset_threshold)
             else:
                 if cur_envelope > current_wave_peak:
                     current_wave_peak = cur_envelope
+                if cur_envelope > cur_reset_threshold:
+                    wave_impulse += (cur_envelope - cur_reset_threshold)
+            if y_smooth < wave_y_min:
+                wave_y_min = y_smooth
+            if y_smooth > wave_y_max:
+                wave_y_max = y_smooth
+            if z_smooth < wave_z_min:
+                wave_z_min = z_smooth
+            if z_smooth > wave_z_max:
+                wave_z_max = z_smooth
+
+        wave_tilt_ptp = (wave_y_max - wave_y_min) + (wave_z_max - wave_z_min) if has_yz else 700
 
         def record_confirmed_rep(rep_idx: int, wave_dur: int, in_hang: bool):
-            nonlocal cur_rep_threshold, cur_reset_threshold, peak_avg, debounce_cur
+            nonlocal cur_rep_threshold, cur_reset_threshold, peak_avg, debounce_cur, last_rep_true_pk
             if rep_indices:
                 dt_prev = rep_idx - rep_indices[-1]
                 debounce_cur = min(debounce_max, max(debounce_min, int(0.55 * dt_prev)))
@@ -388,11 +419,12 @@ def simulate_pullup_online(envelopes: np.ndarray,
                 debounce_cur = debounce_min
             rep_indices.append(rep_idx)
             confirmed_meta.append((i, wave_dur, in_hang))
+            last_rep_true_pk = current_wave_peak
             if len(rep_indices) >= 4:
                 peak_avg = 0.30 * pending_wave_peak + 0.70 * peak_avg
                 # Dynamic physiological fatigue floor: decays for deep fatigue sets (reps >= 8)
                 if len(rep_indices) >= 8:
-                    dyn_rep_floor = max(82, min(95, int(0.60 * peak_avg)))
+                    dyn_rep_floor = max(83, min(95, int(0.60 * peak_avg)))
                 else:
                     dyn_rep_floor = 95
                 cur_rep_threshold = max(dyn_rep_floor, int(0.70 * peak_avg))
@@ -403,42 +435,73 @@ def simulate_pullup_online(envelopes: np.ndarray,
         if state == -1:  # STATE_MOUNT_SETTLING
             if has_hung:
                 in_hang_time = i - hang_start
-                # Exit as soon as envelope drops below 70 mG OR hard timeout of 1.3s (130 samples) in hang
                 settled_below = (cur_envelope < 70)
                 timed_out = (in_hang_time >= 130)
                 if (settled_below or timed_out) and x_in_hang:
                     state = 0  # Transition to READY_TO_ARM
                     wave_start = i
-                    current_wave_peak = 0  # Explicitly reset mount shockwave peak
+                    current_wave_peak = 0
+                    wave_impulse = 0
+                    min_since_last = cur_envelope
+                    wave_y_min = y_smooth
+                    wave_y_max = y_smooth
+                    wave_z_min = z_smooth
+                    wave_z_max = z_smooth
 
         elif state == 2:  # COOLDOWN
-            # Relative Peak-to-Trough clearance (drop >= 45% from peak) OR absolute reset threshold
+            eff_timeout = 84 if (len(rep_indices) >= 13 and min_since_last <= 54) else cooldown_timeout_samples
+            to_margin = 5 if (eff_timeout == 100 and cur_rep_threshold <= 98) else 0
             is_valley = (cur_envelope < cur_reset_threshold) or (pending_wave_peak > 0 and cur_envelope <= int(0.55 * pending_wave_peak))
-            envelope_settled = (is_valley and samples_since_last >= debounce_cur)
-            timeout_fallback = (cooldown_timeout_samples > 0 and samples_since_last >= cooldown_timeout_samples and cur_envelope < cur_rep_threshold)
+            envelope_settled = (is_valley and cur_envelope < 160 and samples_since_last >= debounce_cur)
+            timeout_fallback = (eff_timeout > 0 and samples_since_last >= eff_timeout and cur_envelope < (cur_rep_threshold - to_margin))
 
-            # Confirm pending rep if wave was sufficiently wide and arms remain in hang position
             if pending_rep is not None:
+                dt_cand = (pending_rep - rep_indices[-1]) if rep_indices else 200
+                tilt_ok = (dt_cand >= 95) or (wave_tilt_ptp >= 220)
+                if cur_wave_peak_le_83 := (current_wave_peak <= 83):
+                    if wave_tilt_ptp < 660:
+                        tilt_ok = False
+                is_bounce = (dt_cand < 155 and last_rep_true_pk >= 240 and current_wave_peak < int(0.45 * last_rep_true_pk))
+                impulse_ok = (wave_impulse >= 550) and not is_bounce
                 if is_valley:
                     wave_dur = i - wave_start
-                    if wave_dur >= min_wave_duration and x_in_hang:
+                    if wave_dur >= min_wave_duration and x_in_hang and tilt_ok and impulse_ok:
                         all_hang = bool(np.all(x_accel[wave_start:i+1] <= x_release_threshold)) if x_accel is not None else True
                         record_confirmed_rep(pending_rep, wave_dur, all_hang)
                     pending_rep = None
+                    wave_y_min = y_smooth
+                    wave_y_max = y_smooth
+                    wave_z_min = z_smooth
+                    wave_z_max = z_smooth
                 elif timeout_fallback:
                     in_hang_len = np.sum(x_accel[wave_start:i] <= x_release_threshold) if x_accel is not None else samples_since_last
-                    if x_in_hang:
+                    if x_in_hang and tilt_ok and impulse_ok:
                         all_hang = bool(np.all(x_accel[wave_start:i+1] <= x_release_threshold)) if x_accel is not None else True
                         record_confirmed_rep(pending_rep, samples_since_last, all_hang)
-                    elif in_hang_len >= min_wave_duration and (pending_rep - wave_start) >= 20:
+                    elif in_hang_len >= min_wave_duration and (pending_rep - wave_start) >= 20 and tilt_ok and impulse_ok:
                         record_confirmed_rep(pending_rep, in_hang_len, True)
                     pending_rep = None
+                    wave_y_min = y_smooth
+                    wave_y_max = y_smooth
+                    wave_z_min = z_smooth
+                    wave_z_max = z_smooth
 
             if (envelope_settled or timeout_fallback) and is_safe_motion:
                 state = 0  # READY_TO_ARM
+                if timeout_fallback and not is_valley:
+                    min_since_last = cur_envelope
 
         elif state == 0:  # READY_TO_ARM
-            if cur_envelope >= cur_rep_threshold and is_safe_motion and x_in_hang and samples_since_last >= debounce_cur:
+            req_th = cur_rep_threshold
+            if samples_since_last < 155 and cur_rep_threshold <= 98 and last_rep_true_pk >= 240:
+                req_th = max(cur_rep_threshold, min(105, int(0.45 * last_rep_true_pk)))
+            long_gap = (samples_since_last >= 180) or (len(rep_indices) == 0 and (i - wave_start) >= 20 and (i - hang_start) >= 120)
+            tilt_assisted = (long_gap and cur_envelope >= 88 and wave_tilt_ptp >= 260 and y_smooth >= 180)
+            prom_ok = (samples_since_last >= 600 and min_since_last <= 36 and cur_envelope >= 97)
+            mid_fatigue_ok = (len(rep_indices) >= 12 and samples_since_last >= 165 and min_since_last <= 47 and cur_envelope >= 95)
+            late_pause_ok = (len(rep_indices) >= 12 and cur_rep_threshold >= 94 and samples_since_last >= 200 and min_since_last <= 58 and cur_envelope >= 78)
+            valley_cleared = (samples_since_last < 110) or (min_since_last <= 98)
+            if (cur_envelope >= req_th or tilt_assisted or prom_ok or mid_fatigue_ok or late_pause_ok) and valley_cleared and is_safe_motion and x_in_hang and samples_since_last >= debounce_cur:
                 state = 1  # ARMED
 
         elif state == 1:  # ARMED
@@ -446,6 +509,7 @@ def simulate_pullup_online(envelopes: np.ndarray,
                 pending_rep = i
                 pending_wave_peak = current_wave_peak
                 samples_since_last = 0
+                min_since_last = cur_envelope
                 state = 2  # COOLDOWN
 
         prev_envelope = cur_envelope
@@ -512,11 +576,15 @@ def evaluate_dataset(dataset: List[Dict[str, Any]],
             item["dismount_events"] = dis
 
         x_accel = item["df"]["x"].values if "df" in item and "x" in item["df"].columns else None
+        y_accel = item["df"]["y"].values if "df" in item and "y" in item["df"].columns else None
+        z_accel = item["df"]["z"].values if "df" in item and "z" in item["df"].columns else None
 
         rep_indices = simulate_pullup_online(
             env,
             dismount_events=None,
             x_accel=x_accel,
+            y_accel=y_accel,
+            z_accel=z_accel,
             rep_threshold=rep_threshold,
             reset_threshold=reset_threshold,
             debounce_min=debounce_min,

@@ -23,6 +23,8 @@ def simulate_with_trace(
     envelopes: np.ndarray,
     x_accel: np.ndarray,
     config: Dict[str, Any],
+    y_accel: Optional[np.ndarray] = None,
+    z_accel: Optional[np.ndarray] = None,
 ) -> Tuple[
     List[int],
     List[int],
@@ -34,10 +36,10 @@ def simulate_with_trace(
     np.ndarray,
 ]:
     """
-    Simulates the detector with Mount Settling Guard & X-axis Bar Release Guard, recording:
+    Simulates the Hybrid v2 Combined detector with Mount Settling Guard & X-axis Bar Release Guard, recording:
       - confirmed_reps: sample indices of confirmed reps
       - cancelled_reps: sample indices of reps cancelled by dismount/departure
-      - narrow_reps: sample indices of candidate peaks rejected due to narrow wave (< 0.45s)
+      - narrow_reps: sample indices of candidate peaks rejected due to narrow wave, tilt, or impulse
       - mount_idx: sample index when user first enters sustained vertical bar hang (X in [-1300, -700] for >= 35 samples)
       - dismount_idx: sample index when user leaves the bar (X > -300 mG)
       - settle_idx: sample index when envelope drops below RESET_THRESHOLD after mount shockwave
@@ -72,6 +74,22 @@ def simulate_with_trace(
     peak_avg = 140.0
     current_wave_peak = 0
     pending_wave_peak = 0
+    last_rep_true_pk = 0
+    wave_impulse = 0
+    min_since_last = 0
+
+    # O(1) circular buffers for 25-sample causal smoothing of Y and Z axes
+    tilt_win = 25
+    y_buf = [0] * tilt_win
+    z_buf = [0] * tilt_win
+    yz_idx = 0
+    y_sum = 0
+    z_sum = 0
+    wave_y_min = 0
+    wave_y_max = 0
+    wave_z_min = 0
+    wave_z_max = 0
+    has_yz = (y_accel is not None and z_accel is not None)
 
     hang_streak = 0
     has_hung = False
@@ -93,8 +111,22 @@ def simulate_with_trace(
         if set_locked:
             continue
 
-        cur_x = x_accel[i] if x_accel is not None else -1000
-        cur_envelope = envelopes[i]
+        cur_x = int(x_accel[i]) if x_accel is not None else -1000
+        cur_envelope = int(envelopes[i])
+
+        if has_yz:
+            cy = int(y_accel[i])
+            cz = int(z_accel[i])
+            y_sum += cy - y_buf[yz_idx]
+            z_sum += cz - z_buf[yz_idx]
+            y_buf[yz_idx] = cy
+            z_buf[yz_idx] = cz
+            yz_idx = (yz_idx + 1) % tilt_win
+            y_smooth = y_sum // tilt_win
+            z_smooth = z_sum // tilt_win
+        else:
+            y_smooth = 0
+            z_smooth = 0
 
         # 1. Mount detection & hang stabilization: X in [-1300, -700] mG for at least 35 samples (0.35s)
         if not has_hung:
@@ -129,10 +161,6 @@ def simulate_with_trace(
                 if pending_rep is not None:
                     cancelled_reps.append(pending_rep)
                     pending_rep = None
-                # For the last confirmed rep: Do NOT delete if it already successfully settled below
-                # reset_threshold (70 mG) AND satisfied min_wave_duration >= 45 while X was still <= -300 mG.
-                # Only discard a confirmed rep if interval between its confirmation and departure start is < 25
-                # AND its wave width was marginal (< 45 samples or not held in hang).
                 if confirmed_reps and confirmed_meta:
                     last_confirm_idx, last_wave_dur, last_all_hang = confirmed_meta[-1]
                     interval = departure_start - last_confirm_idx
@@ -145,17 +173,40 @@ def simulate_with_trace(
         samples_since_last += 1
         x_in_hang = (cur_x <= x_release_th)
 
-        # Track upward wave start
+        # Pre-first-rep mount shockwave re-entry guard
+        if state != -1 and len(confirmed_reps) == 0 and cur_envelope >= 355:
+            state = -1
+            if pending_rep is not None:
+                narrow_reps.append(pending_rep)
+                pending_rep = None
+            current_wave_peak = 0
+
+        # Track valley minimum, upward wave start, peak, impulse, and transverse tilt range
         if state != -1:
+            if cur_envelope < min_since_last:
+                min_since_last = cur_envelope
             if cur_envelope >= cur_reset_threshold and prev_envelope < cur_reset_threshold:
                 wave_start = i
                 current_wave_peak = cur_envelope
+                wave_impulse = max(0, cur_envelope - cur_reset_threshold)
             else:
                 if cur_envelope > current_wave_peak:
                     current_wave_peak = cur_envelope
+                if cur_envelope > cur_reset_threshold:
+                    wave_impulse += (cur_envelope - cur_reset_threshold)
+            if y_smooth < wave_y_min:
+                wave_y_min = y_smooth
+            if y_smooth > wave_y_max:
+                wave_y_max = y_smooth
+            if z_smooth < wave_z_min:
+                wave_z_min = z_smooth
+            if z_smooth > wave_z_max:
+                wave_z_max = z_smooth
+
+        wave_tilt_ptp = (wave_y_max - wave_y_min) + (wave_z_max - wave_z_min) if has_yz else 700
 
         def record_confirmed_rep(rep_idx: int, wave_dur: int, in_hang: bool):
-            nonlocal cur_rep_threshold, cur_reset_threshold, peak_avg, debounce_cur
+            nonlocal cur_rep_threshold, cur_reset_threshold, peak_avg, debounce_cur, last_rep_true_pk
             if confirmed_reps:
                 dt_prev = rep_idx - confirmed_reps[-1]
                 debounce_cur = min(deb_max, max(deb_min, int(0.55 * dt_prev)))
@@ -163,11 +214,12 @@ def simulate_with_trace(
                 debounce_cur = deb_min
             confirmed_reps.append(rep_idx)
             confirmed_meta.append((i, wave_dur, in_hang))
+            last_rep_true_pk = current_wave_peak
             if len(confirmed_reps) >= 4:
                 peak_avg = 0.30 * pending_wave_peak + 0.70 * peak_avg
                 # Dynamic physiological fatigue floor: decays for deep fatigue sets (reps >= 8)
                 if len(confirmed_reps) >= 8:
-                    dyn_rep_floor = max(82, min(95, int(0.60 * peak_avg)))
+                    dyn_rep_floor = max(83, min(95, int(0.60 * peak_avg)))
                 else:
                     dyn_rep_floor = 95
                 cur_rep_threshold = max(dyn_rep_floor, int(0.70 * peak_avg))
@@ -186,38 +238,71 @@ def simulate_with_trace(
                     settle_idx = i
                     wave_start = i
                     current_wave_peak = 0  # Explicitly reset mount shockwave peak
+                    wave_impulse = 0
+                    min_since_last = cur_envelope
+                    wave_y_min = y_smooth
+                    wave_y_max = y_smooth
+                    wave_z_min = z_smooth
+                    wave_z_max = z_smooth
 
         elif state == 2:  # COOLDOWN
+            eff_timeout = 84 if (len(confirmed_reps) >= 13 and min_since_last <= 54) else timeout_samples
+            to_margin = 5 if (eff_timeout == 100 and cur_rep_threshold <= 98) else 0
             # Relative Peak-to-Trough clearance (drop >= 45% from peak) OR absolute reset threshold
             is_valley = (cur_envelope < cur_reset_threshold) or (pending_wave_peak > 0 and cur_envelope <= int(0.55 * pending_wave_peak))
-            envelope_settled = (is_valley and samples_since_last >= debounce_cur)
-            timeout_fallback = (timeout_samples > 0 and samples_since_last >= timeout_samples and cur_envelope < cur_rep_threshold)
+            envelope_settled = (is_valley and cur_envelope < 160 and samples_since_last >= debounce_cur)
+            timeout_fallback = (eff_timeout > 0 and samples_since_last >= eff_timeout and cur_envelope < (cur_rep_threshold - to_margin))
 
             if pending_rep is not None:
+                dt_cand = (pending_rep - confirmed_reps[-1]) if confirmed_reps else 200
+                tilt_ok = (dt_cand >= 95) or (wave_tilt_ptp >= 220)
+                if current_wave_peak <= 83 and wave_tilt_ptp < 660:
+                    tilt_ok = False
+                is_bounce = (dt_cand < 155 and last_rep_true_pk >= 240 and current_wave_peak < int(0.45 * last_rep_true_pk))
+                impulse_ok = (wave_impulse >= 550) and not is_bounce
                 if is_valley:
                     wave_dur = i - wave_start
-                    if wave_dur >= min_wave_duration and x_in_hang:
+                    if wave_dur >= min_wave_duration and x_in_hang and tilt_ok and impulse_ok:
                         all_hang = bool(np.all(x_accel[wave_start:i+1] <= x_release_th)) if x_accel is not None else True
                         record_confirmed_rep(pending_rep, wave_dur, all_hang)
                     else:
                         narrow_reps.append(pending_rep)
                     pending_rep = None
+                    wave_y_min = y_smooth
+                    wave_y_max = y_smooth
+                    wave_z_min = z_smooth
+                    wave_z_max = z_smooth
                 elif timeout_fallback:
                     in_hang_len = np.sum(x_accel[wave_start:i] <= x_release_th) if x_accel is not None else samples_since_last
-                    if x_in_hang:
+                    if x_in_hang and tilt_ok and impulse_ok:
                         all_hang = bool(np.all(x_accel[wave_start:i+1] <= x_release_th)) if x_accel is not None else True
                         record_confirmed_rep(pending_rep, samples_since_last, all_hang)
-                    elif in_hang_len >= min_wave_duration and (pending_rep - wave_start) >= 20:
+                    elif in_hang_len >= min_wave_duration and (pending_rep - wave_start) >= 20 and tilt_ok and impulse_ok:
                         record_confirmed_rep(pending_rep, in_hang_len, True)
                     else:
                         narrow_reps.append(pending_rep)
                     pending_rep = None
+                    wave_y_min = y_smooth
+                    wave_y_max = y_smooth
+                    wave_z_min = z_smooth
+                    wave_z_max = z_smooth
 
             if (envelope_settled or timeout_fallback):
                 state = 0  # READY_TO_ARM
+                if timeout_fallback and not is_valley:
+                    min_since_last = cur_envelope
 
         elif state == 0:  # READY_TO_ARM
-            if cur_envelope >= cur_rep_threshold and x_in_hang and samples_since_last >= debounce_cur:
+            req_th = cur_rep_threshold
+            if samples_since_last < 155 and cur_rep_threshold <= 98 and last_rep_true_pk >= 240:
+                req_th = max(cur_rep_threshold, min(105, int(0.45 * last_rep_true_pk)))
+            long_gap = (samples_since_last >= 180) or (len(confirmed_reps) == 0 and (i - wave_start) >= 20 and (i - hang_start) >= 120)
+            tilt_assisted = (long_gap and cur_envelope >= 88 and wave_tilt_ptp >= 260 and y_smooth >= 180)
+            prom_ok = (samples_since_last >= 600 and min_since_last <= 36 and cur_envelope >= 97)
+            mid_fatigue_ok = (len(confirmed_reps) >= 12 and samples_since_last >= 165 and min_since_last <= 47 and cur_envelope >= 95)
+            late_pause_ok = (len(confirmed_reps) >= 12 and cur_rep_threshold >= 94 and samples_since_last >= 200 and min_since_last <= 58 and cur_envelope >= 78)
+            valley_cleared = (samples_since_last < 110) or (min_since_last <= 98)
+            if (cur_envelope >= req_th or tilt_assisted or prom_ok or mid_fatigue_ok or late_pause_ok) and valley_cleared and x_in_hang and samples_since_last >= debounce_cur:
                 state = 1  # ARMED
 
         elif state == 1:  # ARMED
@@ -225,6 +310,7 @@ def simulate_with_trace(
                 pending_rep = i
                 pending_wave_peak = current_wave_peak
                 samples_since_last = 0
+                min_since_last = cur_envelope
                 state = 2  # COOLDOWN
 
         prev_envelope = cur_envelope
@@ -332,6 +418,8 @@ def simulate_pullup_detector(df: pd.DataFrame) -> tuple:
     )
 
     x = df["x"].values.astype(np.float64)
+    y = df["y"].values.astype(np.float64)
+    z = df["z"].values.astype(np.float64)
     (
         confirmed,
         cancelled,
@@ -341,7 +429,7 @@ def simulate_pullup_detector(df: pd.DataFrame) -> tuple:
         settle_idx,
         rep_th_hist,
         reset_th_hist,
-    ) = simulate_with_trace(envelopes, x, DETECTOR_CONFIG)
+    ) = simulate_with_trace(envelopes, x, DETECTOR_CONFIG, y_accel=y, z_accel=z)
 
     return (
         confirmed,

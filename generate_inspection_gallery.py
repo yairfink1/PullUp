@@ -71,7 +71,7 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
         time_s = np.arange(n_samples) / fs
 
         envelopes, _ = precompute_envelopes(mags, diffs)
-        confirmed, cancelled, narrow, mount_idx, dismount_idx, settle_idx, rep_th_hist, reset_th_hist = simulate_with_trace(envelopes, x, CONFIG)
+        confirmed, cancelled, narrow, mount_idx, dismount_idx, settle_idx, rep_th_hist, reset_th_hist = simulate_with_trace(envelopes, x, CONFIG, y_accel=y, z_accel=z)
 
         det_reps = len(confirmed)
         error = det_reps - true_reps

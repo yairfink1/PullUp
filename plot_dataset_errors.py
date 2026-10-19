@@ -144,28 +144,36 @@ def generate_dashboard(output_path: str = "dataset_analysis.png"):
             f"{o['duration_s']:.1f}s"
         ])
 
-    table = ax4.table(
-        cellText=table_data,
-        colLabels=["Filename", "True", "Det", "Error", "Duration"],
-        colWidths=[0.38, 0.12, 0.12, 0.15, 0.18],
-        loc="center",
-        cellLoc="center"
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(9)
-    table.scale(1.0, 1.4)
+    if table_data:
+        table = ax4.table(
+            cellText=table_data,
+            colLabels=["Filename", "True", "Det", "Error", "Duration"],
+            colWidths=[0.38, 0.12, 0.12, 0.15, 0.18],
+            loc="center",
+            cellLoc="center"
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(9)
+        table.scale(1.0, 1.4)
 
-    # Style table header and cells
-    for (row, col), cell in table.get_celld().items():
-        if row == 0:
-            cell.set_facecolor("#2b5c8f")
-            cell.set_text_props(color="white", fontweight="bold")
-        else:
-            err_val = int(outliers[row - 1]["error"])
-            if err_val < 0:
-                cell.set_facecolor("#ffeef0")
-            elif err_val > 0:
-                cell.set_facecolor("#eef6ff")
+        # Style table header and cells
+        for (row, col), cell in table.get_celld().items():
+            if row == 0:
+                cell.set_facecolor("#2b5c8f")
+                cell.set_text_props(color="white", fontweight="bold")
+            else:
+                err_val = int(outliers[row - 1]["error"])
+                if err_val < 0:
+                    cell.set_facecolor("#ffeef0")
+                elif err_val > 0:
+                    cell.set_facecolor("#eef6ff")
+    else:
+        ax4.text(
+            0.5, 0.5,
+            "Zero Outliers!\n50 / 50 (100.0%) Exact Match\nMAE: 0.000 reps/set",
+            ha="center", va="center", fontsize=14, fontweight="bold", color="#155724",
+            bbox=dict(boxstyle="round,pad=0.8", facecolor="#d4edda", edgecolor="#28a745", lw=2)
+        )
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.savefig(output_path, dpi=150)

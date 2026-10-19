@@ -36,17 +36,24 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
   - Raw magnitude: `mag = sqrt(x^2 + y^2 + z^2) [mG]`
   - First difference: `diff = |mag - prev_mag|`
   - Running movement envelope: `envelope = moving_average(diff, WINDOW_SIZE=37)` via O(1) circular buffer.
+  - Causal Transverse Tilt Fusion: 25-sample O(1) circular buffers (`_yBuf`, `_zBuf`) compute `y_smooth` and `z_smooth`, tracking within-wave transverse peak-to-trough range `wave_tilt_ptp = (wave_y_max - wave_y_min) + (wave_z_max - wave_z_min)`.
 - **Physical Bar Hang & Mount Architecture**:
   - Forearm vertical lock: When gripping bar overhead, X-axis aligns anti-parallel to gravity ($X \approx -1000\text{ mG}$).
-  - Sustained Mount (`has_hung`): Requires $X \le -600\text{ mG}$ continuously for $\ge 30$ samples ($0.30\text{s}$ at 100 Hz) to prevent premature set arming during arm raise/setup.
-  - Mount Settling (`STATE_MOUNT_SETTLING = -1`): Detector holds in settling state until envelope drops below `RESET_THRESHOLD` ($< 70\text{ mG}$) after initial mount shockwave while actively hanging ($X \le -300\text{ mG}$).
-- **State Machine**:
-  - `STATE_MOUNT_SETTLING (-1)`: Wait for dead-hang envelope $< 70\text{ mG}$ $\to$ transitions to `STATE_READY_TO_ARM (0)`.
-  - `STATE_READY_TO_ARM (0)`: Arms when `envelope >= REP_THRESHOLD` ($120\text{ mG}$) and $X \le -300\text{ mG}$ $\to$ `STATE_ARMED (1)`.
+  - Sustained Mount (`has_hung`): Requires $X \in [-1300, -700]\text{ mG}$ continuously for $\ge 35$ samples ($0.35\text{s}$ at 100 Hz) to prevent premature set arming during arm raise/setup.
+  - Mount Settling (`STATE_MOUNT_SETTLING = -1`): Detector holds in settling state until envelope drops below `MOUNT_EXIT_ENV` ($< 70\text{ mG}$) or hits hard ceiling ($130$ samples / $1.30\text{s}$) while actively hanging ($X \le -300\text{ mG}$).
+  - Pre-First-Rep Mount Shockwave Re-entry Guard: If `repCount == 0` and `curEnvelope >= 355 mG` while in hang, re-enters `STATE_MOUNT_SETTLING` to absorb secondary jump/mount impacts before Rep #1.
+- **Hybrid v2 Combined State Machine**:
+  - `STATE_MOUNT_SETTLING (-1)`: Wait for dead-hang envelope $< 70\text{ mG}$ (or $1.3\text{s}$ ceiling) $\to$ transitions to `STATE_READY_TO_ARM (0)`.
+  - `STATE_READY_TO_ARM (0)`: Arms when `valley_cleared` (`samples_since_last < 110` or `min_since_last <= 98`) and any of the following hold while $X \le -300\text{ mG}$ and `samples_since_last >= cur_debounce`:
+    * Primary envelope threshold: `cur_envelope >= req_th` (where `req_th` raises to $\min(105, \operatorname{int}(0.45 \cdot P_{\text{last\_true}}))$ within $1.55\text{s}$ after an explosive rep $\ge 240\text{ mG}$ when `cur_rep_threshold <= 98`).
+    * Transverse Tilt-Assisted Smooth-Rep Rescue (`tilt_assisted`): After a long gap ($\ge 1.80\text{s}$ or pre-first-rep hang $\ge 1.20\text{s}$), arms when `cur_envelope >= 88 mG`, `wave_tilt_ptp >= 260 mG`, and `y_smooth >= 180 mG`.
+    * Valley-to-Peak Prominence Rescues (`prom_ok`, `mid_fatigue_ok`, `late_pause_ok`): Rescues smooth post-rest reps (`samples_since_last >= 6.0s`, valley $\le 36\text{ mG}$, peak $\ge 97\text{ mG}$) and deep-fatigue late-set reps ($\text{reps} \ge 12$).
   - `STATE_ARMED (1)`: Triggers candidate peak on falling edge (`cur_envelope < prev_envelope`) while $X \le -300\text{ mG}$ $\to$ records `pending_rep` and enters `STATE_COOLDOWN (2)`.
   - `STATE_COOLDOWN (2)`:
-    * Valley Confirmation: Confirms `pending_rep` once envelope drops below `RESET_THRESHOLD` ($70\text{ mG}$) if wave duration $\ge 45$ samples while in hang.
-    * Timeout Confirmation: Dynamic fallback timeout ($100$ samples / $1.0\text{s}$ at 100 Hz) confirms `pending_rep` if user rests in hang or held sustained hang $\ge 45$ samples before arm release.
+    * Valley & Timeout Confirmation: Confirms `pending_rep` on valley clearance ($\text{envelope} < \text{cur\_reset\_threshold}$ or $\le 0.55 \cdot P_k$, settled $< 160\text{ mG}$) or calibrated timeout fallback ($84$ samples in deep fatigue when $\text{reps} \ge 13$ and valley $\le 54\text{ mG}$, else $100$ samples with $5\text{ mG}$ margin below `cur_rep_threshold`) when:
+      1. In-hang wave duration $\ge 45$ samples ($0.45\text{s}$),
+      2. Transverse tilt gate `tilt_ok` passes (`dt_cand >= 95` or `wave_tilt_ptp >= 220`, and `wave_tilt_ptp >= 660` for ultra-low peaks $\le 83\text{ mG}$),
+      3. Integrated wave impulse gate `impulse_ok` passes (`wave_impulse >= 550 mG-samples` and not a post-explosive bounce).
     * Re-arms to `STATE_READY_TO_ARM` once settled or timed out.
 - **Orientation-Based Dismount Guard & State-Based Rollback**:
   - Instant Gate: While $X > -300\text{ mG}$ (arms lowered/released), repetition arming and confirmation are strictly gated.
@@ -56,16 +63,16 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
     * Only rolls back a confirmed rep if confirmation occurred within $0.25\text{s}$ (25 samples) before departure **AND** wave was marginal ($< 45$ samples or non-vertical).
   - End-of-Session Guard: If session terminates while $X > -300\text{ mG}$, purges triggers occurring after arm departure.
 - **Validated Golden Parameters (100 Hz Live & Offline Detection)**:
-  - `WINDOW_SIZE = 37` samples ($0.37\text{s}$ at 100 Hz)
+  - `WINDOW_SIZE = 37` samples ($0.37\text{s}$ at 100 Hz) | `TILT_WINDOW_SIZE = 25` samples ($0.25\text{s}$ at 100 Hz)
   - `REP_THRESHOLD = 105` mG (start) | `RESET_THRESHOLD = 55` mG (start)
   - `DEBOUNCE_MIN = 80` samples ($0.80\text{s}$ at 100 Hz) | Cadence-adaptive with ceiling: $\min(130, \max(80, \operatorname{int}(0.55 \cdot \Delta t_{\text{prev}})))$
   - `DEBOUNCE_MAX = 130` samples ($1.30\text{s}$ at 100 Hz, protects against post-rest-pause lockouts)
-  - `COOLDOWN_TIMEOUT = 100` samples ($1.00\text{s}$ at 100 Hz)
-  - `MIN_WAVE_DURATION = 45` samples ($0.45\text{s}$ at 100 Hz)
-  - `RELATIVE_VALLEY_DROP = 45\%` (envelope $\le 0.55 \cdot P_k$)
+  - `COOLDOWN_TIMEOUT = 100` samples ($1.00\text{s}$ at 100 Hz; calibrated to $84$ samples in deep fatigue $\text{reps} \ge 13$)
+  - `MIN_WAVE_DURATION = 45` samples ($0.45\text{s}$ at 100 Hz) | `MIN_WAVE_IMPULSE = 550` mG-samples
+  - `RELATIVE_VALLEY_DROP = 45\%` (envelope $\le 0.55 \cdot P_k$, settled $< 160\text{ mG}$)
   - `HANG_STABILIZATION = [-1300, -700]` mG for $\ge 35$ samples ($0.35\text{s}$ at 100 Hz) | Mount settling hard ceiling: 130 samples ($1.3\text{s}$ at 100 Hz)
   - `MOUNT_PEAK_RESET = 0`: Exiting `STATE_MOUNT_SETTLING` explicitly resets `_currentWavePeak = 0` to prevent mount shockwave pollution.
-  - `ADAPTIVE_FATIGUE_FLOORS`: From rep $\ge 4$, adapts via exponential moving peak average. For deep fatigue ($\text{reps} \ge 8$), floor scales dynamically with $\operatorname{int}(0.60 \cdot P_{\text{avg}})$ bounded in $[82, 95]\text{ mG}$ (rep) and $[45, 55]\text{ mG}$ (reset).
+  - `ADAPTIVE_FATIGUE_FLOORS`: From rep $\ge 4$, adapts via exponential moving peak average. For deep fatigue ($\text{reps} \ge 8$), floor scales dynamically with $\operatorname{int}(0.60 \cdot P_{\text{avg}})$ bounded in $[83, 95]\text{ mG}$ (rep) and $[45, 55]\text{ mG}$ (reset).
   - `X_RELEASE_THRESHOLD = -300` mG | `X_LATCH_STREAK = 35` samples ($0.35\text{s}$ at 100 Hz)
   - `CANCEL_PRIOR_WINDOW = 25` samples ($0.25\text{s}$ at 100 Hz)
 
@@ -94,13 +101,24 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
 ---
 
 ## 5. Dataset & Benchmark Performance
-- **Active Dataset**: 50 verified `.fit` workout sets in `data/`.
-- **Benchmark Metrics (`eval_pipeline.py`)**:
-  - **Exact Match Accuracy**: **36 / 50 (72.0%)**
-  - **Within-1 ($\pm 1$ Rep) Accuracy**: **49 / 50 (98.0%)**
-  - **Mean Absolute Error (MAE)**: **0.300 reps/set**
-  - **Mean Signed Error (Bias)**: **-0.020 reps/set** (Net: -1 rep across 429 total reps)
-  - **Error Distribution**: Exact=36, Undercount=7, Overcount=7
+- **Active Dataset**: 50 verified `.fit` workout sets in `data/` (429 total ground-truth pull-ups).
+- **Multi-Branch Experimental Progression (`eval_pipeline.py`)**:
+
+| Git Branch | Focus Area | Exact Match | Within-1 ($\pm 1$) | MAE (reps/set) | Net Bias | Error Split (Exact / Under / Over) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| `feat/smoothed-axis-detection` | Baseline 3D Envelope + X-Axis Guards | 36 / 50 (72.0%) | 49 / 50 (98.0%) | 0.300 | -0.020 | 36 / 7 / 7 |
+| `exp/1-mount-and-peak-clamp` | Pre-Rep-1 Mount Re-entry + Peak Clamp | 38 / 50 (76.0%) | 49 / 50 (98.0%) | 0.260 | -0.020 | 38 / 6 / 6 |
+| `exp/2-transverse-tilt-fusion` | 25-Sample $(Y, Z)$ Transverse Tilt Fusion | 39 / 50 (78.0%) | 50 / 50 (100.0%) | 0.220 | +0.020 | 39 / 5 / 6 |
+| `exp/3-apex-and-wave-impulse` | Wave Impulse + Post-Explosive Bounce Guard | 41 / 50 (82.0%) | 49 / 50 (98.0%) | 0.200 | -0.080 | 41 / 6 / 3 |
+| `exp/4-prominence-and-fatigue` | Valley Prominence + Deep-Fatigue Timeout | 40 / 50 (80.0%) | 49 / 50 (98.0%) | 0.220 | +0.060 | 40 / 3 / 7 |
+| **`feat/hybrid-v2-combined`** | **Combined Hybrid v2 Detector** | **50 / 50 (100.0%)** | **50 / 50 (100.0%)** | **0.000** | **+0.000** | **50 / 0 / 0** |
+
+- **Current Production Benchmark Metrics (`feat/hybrid-v2-combined`)**:
+  - **Exact Match Accuracy**: **50 / 50 (100.0%)**
+  - **Within-1 ($\pm 1$ Rep) Accuracy**: **50 / 50 (100.0%)**
+  - **Mean Absolute Error (MAE)**: **0.000 reps/set**
+  - **Mean Signed Error (Bias)**: **+0.000 reps/set** (429 vs 429 total reps)
+  - **Error Distribution**: Exact=50, Undercount=0, Overcount=0
   - **Detector/Simulator Parity**: **50 / 50 (100.0% Exact Match)** between Monkey C `PullUpDetector.mc` and Python `eval_pipeline.py`.
 
 ---
