@@ -139,8 +139,9 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
         var detectedReps = _detector.getRepCount();
         System.println("PullUpMultiSet: Set " + _currentSet + " stopped. Reps detected: " + detectedReps);
 
-        // Push EditView in multi-set mode.
-        var editView     = new PullUpEditView(detectedReps, true, _currentSet);
+        // Push EditView in multi-set mode with detected exercise name.
+        var exName       = _detector.getExerciseName();
+        var editView     = new PullUpEditView(detectedReps, true, _currentSet, exName);
         var editDelegate = new PullUpEditDelegate(editView, _session, self, true, _currentSet);
         WatchUi.pushView(editView, editDelegate, WatchUi.SLIDE_UP);
     }

@@ -298,6 +298,7 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         Sensor.unregisterSensorDataListener();
 
         var detectedReps = _quickDetector.getRepCount();
+        var exName       = _quickDetector.getExerciseName();
         if (_quickLapRepsField != null) {
             _quickLapRepsField.setData(detectedReps);
         }
@@ -312,7 +313,7 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         _view.setQuickRecording(false);
         WatchUi.requestUpdate();
 
-        var editView     = new PullUpEditView(detectedReps, false, 1);
+        var editView     = new PullUpEditView(detectedReps, false, 1, exName);
         var editDelegate = new PullUpEditDelegate(editView, sessionToPass, null, false, 1);
         editDelegate.setFitFields(_quickTotalRepsField, _quickLapRepsField);
 
@@ -326,7 +327,8 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
     }
 
     private function _updateQuickUi() as Void {
-        var reps = _quickDetector.getRepCount();
+        var reps   = _quickDetector.getRepCount();
+        var exName = _quickDetector.getExerciseName();
         if (_quickLapRepsField != null) { _quickLapRepsField.setData(reps); }
         if (_quickTotalRepsField != null) { _quickTotalRepsField.setData(reps); }
 
@@ -339,8 +341,9 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         } else if (_quickDetector.getState() == STATE_MOUNT_SETTLING) {
             _view.setQuickStatus("SETTLING...");
         } else {
-            _view.setQuickStatus("RECORDING...");
+            _view.setQuickStatus(exName);
         }
+
 
         _view.setQuickRepCount(reps);
         _view.setQuickElapsedTime(timeStr);
@@ -441,13 +444,15 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         Sensor.unregisterSensorDataListener();
 
         var detectedReps = _multiDetector.getRepCount();
+        var exName       = _multiDetector.getExerciseName();
         _view.setMultiRecording(false);
         WatchUi.requestUpdate();
 
-        var editView     = new PullUpEditView(detectedReps, true, _multiCurrentSet);
+        var editView     = new PullUpEditView(detectedReps, true, _multiCurrentSet, exName);
         var editDelegate = new PullUpEditDelegate(editView, _multiSession, self, true, _multiCurrentSet);
         WatchUi.pushView(editView, editDelegate, WatchUi.SLIDE_UP);
     }
+
 
     public function onSetConfirmed(confirmedReps as Number) as Void {
         if (_multiSession != null && _multiSession.isRecording()) {
@@ -572,8 +577,9 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         } else if (_multiDetector.getState() == STATE_MOUNT_SETTLING) {
             statusInfo = "SETTLING...";
         } else {
-            statusInfo = "Samples: " + _multiDetector.getSampleCount();
+            statusInfo = _multiDetector.getExerciseName() + " | S: " + _multiDetector.getSampleCount();
         }
+
 
         _view.setMultiRecording(true);
         _view.setMultiSetNum(_multiCurrentSet);

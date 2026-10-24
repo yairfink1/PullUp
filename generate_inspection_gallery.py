@@ -12,6 +12,7 @@ Saves sorted visual cards into inspection_gallery/ for easy visual auditing.
 import os
 import sys
 import glob
+import json
 from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
 import matplotlib
@@ -33,6 +34,17 @@ CONFIG = DETECTOR_CONFIG
 # Import canonical simulate_with_trace from detect_pullups to avoid code duplication
 # and guarantee 100% synchronization across offline analysis tools.
 from detect_pullups import simulate_with_trace
+import experiments.cand11_postset_y as cand11
+import experiments.cand14_postset_consensus as cand14
+
+
+def load_test_set_names(workspace_dir: str) -> set:
+    """Loads held-out test set filenames from split.json if available."""
+    split_path = os.path.join(workspace_dir, "split.json")
+    if os.path.isfile(split_path):
+        with open(split_path, "r", encoding="utf-8") as f:
+            return set(json.load(f).get("test", []))
+    return set()
 
 
 # ============================================================================
@@ -44,21 +56,42 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
     gallery_path = os.path.join(workspace_dir, output_dir)
     os.makedirs(gallery_path, exist_ok=True)
 
+    # Remove stale PNG cards before regenerating so indices and split tags stay clean
+    for old_png in glob.glob(os.path.join(gallery_path, "*.png")):
+        try:
+            os.remove(old_png)
+        except OSError:
+            pass
+
+    test_names = load_test_set_names(workspace_dir)
+
     print(f"Loading dataset from: {data_path}")
     dataset, skipped = load_dataset(data_path, workspace_dir)
-    print(f"Loaded {len(dataset)} valid sets. Generating inspection gallery in '{output_dir}/'...\n")
+    print(f"Loaded {len(dataset)} valid sets ({len(dataset) - len(test_names)} TRAIN, {len(test_names)} TEST). Generating inspection gallery in '{output_dir}/'...\n")
 
     exact_matches = []
     suspect_matches = []
     mismatches = []
 
-    # Sort dataset by True Reps (ascending), then by duration
-    dataset.sort(key=lambda d: d["filename"])
+    # Sort dataset so TRAIN sets come first (chronological), followed by TEST sets (chronological),
+    # making it effortless to browse TRAIN vs TEST in file explorer while keeping chronological order within each split.
+    dataset.sort(key=lambda d: (1 if d["filename"] in test_names else 0, d["filename"]))
 
     fs = 100.0  # 100 Hz hardware sensor sample rate
+    train_idx = 0
+    test_idx = 0
 
     for idx, item in enumerate(dataset, 1):
         fname = item["filename"]
+        is_test = fname in test_names
+        if is_test:
+            test_idx += 1
+            split_tag = "TEST"
+            split_idx = test_idx
+        else:
+            train_idx += 1
+            split_tag = "TRAIN"
+            split_idx = train_idx
         df = item["df"]
         x = df["x"].values.astype(np.float64)
         y = df["y"].values.astype(np.float64)
@@ -71,7 +104,9 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
         time_s = np.arange(n_samples) / fs
 
         envelopes, _ = precompute_envelopes(mags, diffs)
-        confirmed, cancelled, narrow, mount_idx, dismount_idx, settle_idx, rep_th_hist, reset_th_hist = simulate_with_trace(envelopes, x, CONFIG, y_accel=y, z_accel=z)
+        base_confirmed, cancelled, narrow, mount_idx, dismount_idx, settle_idx, rep_th_hist, reset_th_hist = simulate_with_trace(envelopes, x, CONFIG, y_accel=y, z_accel=z)
+        confirmed, _, post_reps, _, added_reps, pruned_reps = cand14.detect_with_channels(df)
+        cancelled = sorted(set(list(cancelled) + [int(p) for p in pruned_reps]))
 
         det_reps = len(confirmed)
         error = det_reps - true_reps
@@ -94,6 +129,18 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
         # Generate 3-Row Stacked Figure
         fig, axes = plt.subplots(3, 1, figsize=(16, 11), sharex=True, dpi=120)
 
+        # Precompute 2-pass zero-phase smoothed Y-axis wrist tilt (35-sample centered MA)
+        y_smooth = cand11.smooth_two_pass_centered(y, win=35).astype(np.int32)
+
+        # Automatic exercise classification from hang posture & rep excursion
+        s_hang = settle_idx if settle_idx is not None else (mount_idx if mount_idx is not None else 100)
+        e_hang = dismount_idx if dismount_idx is not None else (n_samples - 100)
+        in_hang_y = y_smooth[s_hang:e_hang] if e_hang > s_hang else y_smooth
+        med_hang_y = np.median(in_hang_y) if len(in_hang_y) > 0 else 0
+        p90_hang_y = np.percentile(in_hang_y, 90) if len(in_hang_y) > 0 else 0
+        is_chin = bool((p90_hang_y > 180 and med_hang_y > -40) or (p90_hang_y > 230))
+        exercise_name = "CHIN-UP" if is_chin else "PULL-UP"
+
         # Color title based on status
         if status == "MATCH":
             title_color = "#155724"  # Green
@@ -108,10 +155,16 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
         sign = "+" if error > 0 else ""
         mount_str = f"Mount: {mount_idx/fs:.2f}s (Settle: {settle_idx/fs:.2f}s)" if (mount_idx is not None and settle_idx is not None) else (f"Mount: {mount_idx/fs:.2f}s" if mount_idx is not None else "Mount: N/A")
         dismount_str = f"Dismount: {dismount_idx/fs:.2f}s" if dismount_idx is not None else "Dismount: End"
+
+        # Subtle background tint for TEST sets so they are visually distinct at a glance
+        if is_test:
+            fig.patch.set_facecolor("#fffcf2")
+
         fig.suptitle(
-            f"Set #{idx:02d}: {fname}  |  True: {true_reps}  |  Detected: {det_reps} ({sign}{error})  |  Dur: {duration_s:.1f}s  [{bg_badge}]  |  {mount_str} -> {dismount_str}",
-            fontsize=13, fontweight="bold", color=title_color, y=0.98
+            f"[{split_tag} #{split_idx:02d}]  {fname}  |  [{exercise_name}]  |  True: {true_reps}  |  Detected: {det_reps} ({sign}{error})  |  Dur: {duration_s:.1f}s  [{bg_badge}]  |  {mount_str} -> {dismount_str}",
+            fontsize=12.5, fontweight="bold", color=title_color, y=0.98
         )
+
 
         # --------------------------------------------------------------------
         # Helper: Draw Purple Bar Mount & Dismount Boundary Lines Across Subplots
@@ -160,26 +213,15 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
         # --------------------------------------------------------------------
         # Subplot 2 (Middle): Causal Envelope, Smoothed Y-Axis Tilt & Rep Detection
         # --------------------------------------------------------------------
-        tilt_win = 25
-        y_smooth = np.zeros(n_samples, dtype=np.int32)
-        y_buf = [0] * tilt_win
-        yz_idx = 0
-        y_sum = 0
-        for i in range(n_samples):
-            cy = int(y[i])
-            y_sum += cy - y_buf[yz_idx]
-            y_buf[yz_idx] = cy
-            yz_idx = (yz_idx + 1) % tilt_win
-            y_smooth[i] = y_sum // tilt_win
-
         axes[1].axhline(0, color="gray", linestyle=":", lw=0.8, alpha=0.6)
         axes[1].plot(
+
             time_s,
             y_smooth,
             color="#2ca02c",
-            lw=1.5,
-            alpha=0.9,
-            label="Smoothed Y-Axis Wrist Tilt (25-sample MA)",
+            lw=1.6,
+            alpha=0.95,
+            label="Zero-Phase Smoothed Y-Axis Tilt (2-Pass 35-Sample MA)",
         )
         axes[1].plot(time_s, envelopes, color="#0056b3", lw=1.5, label="Movement Envelope (37-sample MA)")
         axes[1].plot(time_s, rep_th_hist, color="crimson", linestyle="-", lw=1.3, label=f"Adaptive REP Threshold (start {CONFIG['rep_threshold']} mG)")
@@ -193,13 +235,21 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
             wm_t = CONFIG["warmup_samples"] / fs
             axes[1].axvspan(0, wm_t, color="gray", alpha=0.18, label=f"Warmup ({wm_t:.1f}s)")
 
-        # Label Confirmed Reps
+        # Label Confirmed Reps (distinguishing Y-Wave Rescued Reps with green stars)
+        added_set = set(int(a) for a in added_reps)
         for r_i, r_samp in enumerate(confirmed, 1):
             t_rep = r_samp / fs
-            env_val = envelopes[r_samp]
-            axes[1].axvline(t_rep, color="crimson", linestyle="--", lw=1.1, alpha=0.85)
-            axes[1].plot(t_rep, env_val, marker="o", markersize=6, color="crimson", zorder=5)
-            axes[1].text(t_rep, env_val + 14, f"#{r_i}", ha="center", va="bottom", fontsize=8, fontweight="bold", color="crimson")
+            is_added = int(r_samp) in added_set
+            if is_added:
+                y_val = int(y_smooth[r_samp])
+                axes[1].axvline(t_rep, color="#1b7837", linestyle="--", lw=1.2, alpha=0.9)
+                axes[1].plot(t_rep, y_val, marker="*", markersize=9, color="#1b7837", zorder=6)
+                axes[1].text(t_rep, y_val + 16, f"#{r_i} (Y)", ha="center", va="bottom", fontsize=8, fontweight="bold", color="#1b7837")
+            else:
+                env_val = envelopes[r_samp]
+                axes[1].axvline(t_rep, color="crimson", linestyle="--", lw=1.1, alpha=0.85)
+                axes[1].plot(t_rep, env_val, marker="o", markersize=6, color="crimson", zorder=5)
+                axes[1].text(t_rep, env_val + 14, f"#{r_i}", ha="center", va="bottom", fontsize=8, fontweight="bold", color="crimson")
 
         # Label Cancelled Reps
         for c_samp in cancelled:
@@ -247,13 +297,14 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
         axes[2].legend(loc="upper right", fontsize=8, ncol=5)
 
         # Save plot (with brief retry for transient Windows file-sync locks)
+        # Prefix with TRAIN_XX or TEST_XX so file explorer naturally groups and sorts them
         base_name = os.path.splitext(fname)[0]
-        out_fname = f"{idx:02d}_{status}_{base_name}_T{true_reps}_D{det_reps}.png"
+        out_fname = f"{split_tag}_{split_idx:02d}_{status}_{base_name}_T{true_reps}_D{det_reps}.png"
         out_path = os.path.join(gallery_path, out_fname)
         plt.tight_layout(rect=[0, 0.02, 1, 0.96])
         for attempt in range(5):
             try:
-                plt.savefig(out_path, dpi=120)
+                plt.savefig(out_path, dpi=120, facecolor=fig.get_facecolor())
                 break
             except OSError:
                 if attempt == 4:

@@ -55,7 +55,12 @@ const STATE_READY_TO_ARM   as Number = 0;
 const STATE_ARMED          as Number = 1;
 const STATE_COOLDOWN       as Number = 2;
 
+// Exercise type classification constants.
+const EXERCISE_PULL_UP     as Number = 0;
+const EXERCISE_CHIN_UP     as Number = 1;
+
 class PullUpDetector {
+
 
     // Calibration constants (sample-rate independent mG levels and buffer sizes).
     private const BASE_REP_THRESHOLD      as Number = 105;
@@ -157,7 +162,13 @@ class PullUpDetector {
     private var _curResetThreshold as Number = 55;
     private var _peakAvg           as Float = 140.0;
 
+    // Automatic exercise classification (Chin-Up vs. Pull-Up)
+    private var _hangYSum          as Number = 0;
+    private var _hangYSamples      as Number = 0;
+    private var _exerciseType      as Number = EXERCISE_PULL_UP;
+
     function initialize() {
+
         _diffBuf = new Array<Number>[WINDOW_SIZE];
         _yBuf    = new Array<Number>[TILT_WINDOW_SIZE];
         _zBuf    = new Array<Number>[TILT_WINDOW_SIZE];
@@ -283,6 +294,10 @@ class PullUpDetector {
         _curResetThreshold = BASE_RESET_THRESHOLD;
         _peakAvg           = 140.0;
 
+        _hangYSum          = 0;
+        _hangYSamples      = 0;
+        _exerciseType      = EXERCISE_PULL_UP;
+
         for (var i = 0; i < WINDOW_SIZE; i++) {
             _diffBuf[i] = 0;
         }
@@ -291,6 +306,7 @@ class PullUpDetector {
             _zBuf[j] = 0;
         }
     }
+
 
     // Processes a single accelerometer sample.
     // Returns:
@@ -418,10 +434,22 @@ class PullUpDetector {
         var isSafeMotion = (_dismountLockout == 0);
         var xInHang      = (x <= X_RELEASE_THRESHOLD);
 
+        // Accumulate Y tilt while hanging in ready/active states for exercise classification.
+        if (xInHang && _state != STATE_MOUNT_SETTLING) {
+            _hangYSum += ySmooth;
+            _hangYSamples++;
+            // A sustained positive hang baseline (> 20 mG after 0.5s) indicates underhand/supinated grip (Chin-Up).
+            if (_hangYSamples >= 50) {
+                var meanHangY = _hangYSum / _hangYSamples;
+                _exerciseType = (meanHangY > 20) ? EXERCISE_CHIN_UP : EXERCISE_PULL_UP;
+            }
+        }
+
         // Pre-first-rep mount shockwave re-entry guard.
         if (_state != STATE_MOUNT_SETTLING && _repCount == 0 && curEnvelope >= MOUNT_SHOCK_REENTRY_ENV) {
             _state            = STATE_MOUNT_SETTLING;
             _pendingRepSample = -1;
+
             _currentWavePeak  = 0;
         }
 
@@ -658,4 +686,13 @@ class PullUpDetector {
     public function getCurResetThreshold() as Number {
         return _curResetThreshold;
     }
+
+    public function getExerciseType() as Number {
+        return _exerciseType;
+    }
+
+    public function getExerciseName() as String {
+        return (_exerciseType == EXERCISE_CHIN_UP) ? "CHIN UP" : "PULL UP";
+    }
 }
+

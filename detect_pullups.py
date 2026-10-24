@@ -483,6 +483,28 @@ def plot_pullup_inspection(
 
     det_reps = len(confirmed)
 
+    # Precompute causal smoothed Y-axis wrist tilt (25-sample MA)
+    tilt_win = 25
+    y_smooth = np.zeros(n_samples, dtype=np.int32)
+    y_buf = [0] * tilt_win
+    yz_idx = 0
+    y_sum = 0
+    for i in range(n_samples):
+        cy = int(y[i])
+        y_sum += cy - y_buf[yz_idx]
+        y_buf[yz_idx] = cy
+        yz_idx = (yz_idx + 1) % tilt_win
+        y_smooth[i] = y_sum // tilt_win
+
+    # Automatic exercise classification from hang posture & rep excursion
+    s_hang = settle_idx if settle_idx is not None else (mount_idx if mount_idx is not None else 100)
+    e_hang = dismount_idx if dismount_idx is not None else (n_samples - 100)
+    in_hang_y = y_smooth[s_hang:e_hang] if e_hang > s_hang else y_smooth
+    med_hang_y = np.median(in_hang_y) if len(in_hang_y) > 0 else 0
+    p90_hang_y = np.percentile(in_hang_y, 90) if len(in_hang_y) > 0 else 0
+    is_chin = bool((p90_hang_y > 180 and med_hang_y > -40) or (p90_hang_y > 230))
+    exercise_name = "CHIN-UP" if is_chin else "PULL-UP"
+
     # Determine status and title badge
     if true_reps is not None:
         error = det_reps - true_reps
@@ -516,12 +538,13 @@ def plot_pullup_inspection(
     fig, axes = plt.subplots(3, 1, figsize=(16, 11), sharex=True, dpi=120)
 
     fig.suptitle(
-        f"{fname}  |  {rep_summary_str}  |  Dur: {duration_s:.1f}s  [{bg_badge}]  |  {mount_str} -> {dismount_str}",
+        f"{fname}  |  [{exercise_name}]  |  {rep_summary_str}  |  Dur: {duration_s:.1f}s  [{bg_badge}]  |  {mount_str} -> {dismount_str}",
         fontsize=13,
         fontweight="bold",
         color=title_color,
         y=0.98,
     )
+
 
     # --------------------------------------------------------------------
     # Helper: Draw Purple Bar Mount & Dismount Boundary Lines Across Subplots
@@ -587,19 +610,8 @@ def plot_pullup_inspection(
     # --------------------------------------------------------------------
     # Subplot 2 (Middle): Causal Envelope, Smoothed Y-Axis Tilt & Rep Detection
     # --------------------------------------------------------------------
-    tilt_win = 25
-    y_smooth = np.zeros(n_samples, dtype=np.int32)
-    y_buf = [0] * tilt_win
-    yz_idx = 0
-    y_sum = 0
-    for i in range(n_samples):
-        cy = int(y[i])
-        y_sum += cy - y_buf[yz_idx]
-        y_buf[yz_idx] = cy
-        yz_idx = (yz_idx + 1) % tilt_win
-        y_smooth[i] = y_sum // tilt_win
-
     axes[1].axhline(0, color="gray", linestyle=":", lw=0.8, alpha=0.6)
+
     axes[1].plot(
         time_s,
         y_smooth,

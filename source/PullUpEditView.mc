@@ -7,15 +7,17 @@ import Toybox.WatchUi;
 // ---------------------------------------------------------------------------
 class PullUpEditView extends WatchUi.View {
 
-    private var _repCount   as Number;
-    private var _isMultiSet as Boolean = false;
-    private var _setNumber  as Number  = 1;
+    private var _repCount     as Number;
+    private var _isMultiSet   as Boolean = false;
+    private var _setNumber    as Number  = 1;
+    private var _exerciseName as String  = "PULL UP";
 
-    function initialize(detectedReps as Number, isMultiSet as Boolean, setNumber as Number) {
+    function initialize(detectedReps as Number, isMultiSet as Boolean, setNumber as Number, exerciseName as String or Null) {
         View.initialize();
-        _repCount   = detectedReps;
-        _isMultiSet = isMultiSet;
-        _setNumber  = setNumber;
+        _repCount     = detectedReps;
+        _isMultiSet   = isMultiSet;
+        _setNumber    = setNumber;
+        _exerciseName = (exerciseName != null) ? exerciseName : "PULL UP";
     }
 
     function onLayout(dc as Graphics.Dc) as Void {
@@ -32,8 +34,10 @@ class PullUpEditView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.clear();
 
-        // 1. Title
-        var titleText = _isMultiSet ? ("SET " + _setNumber + " COMPLETE") : "SET COMPLETE";
+        // 1. Title with dynamic exercise name: "PULL UP COMPLETE" or "CHIN UP COMPLETE" / "SET 1: CHIN UP"
+        var titleText = _isMultiSet
+            ? ("SET " + _setNumber + ": " + _exerciseName)
+            : (_exerciseName + " COMPLETE");
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, (h * 0.12).toNumber(), Graphics.FONT_SMALL, titleText, Graphics.TEXT_JUSTIFY_CENTER);
 
@@ -46,6 +50,7 @@ class PullUpEditView extends WatchUi.View {
         // 3. Hints
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, (h * 0.60).toNumber(), Graphics.FONT_XTINY, "UP / DOWN to adjust", Graphics.TEXT_JUSTIFY_CENTER);
+
 
         var actionHint = _isMultiSet ? "START = Save & Rest  |  BACK = Discard" : "START = Save   BACK = Discard";
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);

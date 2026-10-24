@@ -186,8 +186,9 @@ class PullUpDelegate extends WatchUi.BehaviorDelegate {
 
         System.println("PullUpDelegate: Quick set stopped - detected reps: " + detectedReps);
 
-        // Push confirmation screen.
-        var editView     = new PullUpEditView(detectedReps, false, 1);
+        // Push confirmation screen with detected exercise name.
+        var exName       = _detector.getExerciseName();
+        var editView     = new PullUpEditView(detectedReps, false, 1, exName);
         var editDelegate = new PullUpEditDelegate(editView, sessionToPass, null, false, 1);
         editDelegate.setFitFields(_totalRepsField, _lapRepsField);
         _totalRepsField = null;

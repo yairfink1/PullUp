@@ -14,15 +14,17 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
    - Title: "Pull Ups".
    - Subtitles: "X reps today" (Green) and "Y reps this week" (Light Gray).
    - Storage managed in `PullUpStorage.mc` with automatic rollover (Sunday = start of week).
-2. **Main / Quick Set View (`PullUpView`):**
-   - Page 1 of 2. Designed for quick standalone sets.
+2. **Main / Quick Set View (`PullUpView` or Page 0 of `PullUpContainerView`):**
+   - Page 1 of 2 in two-page mode / Page 0 of 3 in container mode. Designed for quick standalone sets.
    - `START`: Starts live sensor recording session.
+   - Live exercise feedback: Displays `"PULL UP"` or `"CHIN UP"` dynamically based on real-time wrist tilt classification.
    - `STOP`: Opens edit/confirm screen (`PullUpEditView`).
-   - Page Indicator: Native-style 2-dot indicator on the **LEFT edge (9 o'clock)** with 3-second auto-hide.
-3. **Multi-Set Workout View (`PullUpMultiSetView`):**
-   - Page 2 of 2 (accessible via `DOWN` / scroll).
+   - Page Indicator: Native-style dot indicator on the **LEFT edge (9 o'clock)** with 3-second auto-hide.
+3. **Multi-Set Workout View (`PullUpMultiSetView` or Page 1 of `PullUpContainerView`):**
+   - Page 2 of 2 / Page 1 of 3 (accessible via `DOWN` / scroll).
    - Maintains a single continuous session with multiple sets (laps) and rest timers.
 4. **Edit / Confirm Dialog (`PullUpEditView` / `PullUpEditDelegate`):**
+   - Dynamic exercise title: `"PULL UP COMPLETE"` or `"CHIN UP COMPLETE"` in Quick Set, and `"SET X: PULL UP"` / `"SET X: CHIN UP"` in Multi-Set.
    - `UP` / `DOWN`: Adjust rep count.
    - `START`: Confirm reps and save workout session.
    - `BACK`: Discard session.
@@ -37,6 +39,11 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
   - First difference: `diff = |mag - prev_mag|`
   - Running movement envelope: `envelope = moving_average(diff, WINDOW_SIZE=37)` via O(1) circular buffer.
   - Causal Transverse Tilt Fusion: 25-sample O(1) circular buffers (`_yBuf`, `_zBuf`) compute `y_smooth` and `z_smooth`, tracking within-wave transverse peak-to-trough range `wave_tilt_ptp = (wave_y_max - wave_y_min) + (wave_z_max - wave_z_min)`.
+- **Automatic Exercise Classification (Pull-Up vs. Chin-Up)**:
+  - Forearm rotation between pronated (Pull-Up) and supinated (Chin-Up) flips the lateral $Y$-axis.
+  - While hanging on the bar ($X \le -300\text{ mG}$), the detector accumulates $Y_{\text{smooth}}$ in O(1).
+  - After 50 samples ($0.5\text{s}$) in hang: if mean hang $Y > +20\text{ mG}$ $\to$ classifies as `EXERCISE_CHIN_UP` (`"CHIN UP"`), else `EXERCISE_PULL_UP` (`"PULL UP"`).
+  - Repetition dynamics: Chin-Ups display positive peaks ($+200\text{ to }+400\text{ mG}$), whereas Pull-Ups display negative dips/troughs ($-150\text{ to }-280\text{ mG}$).
 - **Physical Bar Hang & Mount Architecture**:
   - Forearm vertical lock: When gripping bar overhead, X-axis aligns anti-parallel to gravity ($X \approx -1000\text{ mG}$).
   - Sustained Mount (`has_hung`): Requires $X \in [-1300, -700]\text{ mG}$ continuously for $\ge 35$ samples ($0.35\text{s}$ at 100 Hz) to prevent premature set arming during arm raise/setup.
@@ -101,7 +108,7 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
 ---
 
 ## 5. Dataset & Benchmark Performance
-- **Active Dataset**: 50 verified `.fit` workout sets in `data/` (429 total ground-truth pull-ups).
+- **Active Dataset**: 56 verified `.fit` workout sets in `data/` (488 total ground-truth repetitions: 51 Pull-Up sets, 5 Chin-Up sets).
 - **Multi-Branch Experimental Progression (`eval_pipeline.py`)**:
 
 | Git Branch | Focus Area | Exact Match | Within-1 ($\pm 1$) | MAE (reps/set) | Net Bias | Error Split (Exact / Under / Over) |
@@ -111,27 +118,29 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
 | `exp/2-transverse-tilt-fusion` | 25-Sample $(Y, Z)$ Transverse Tilt Fusion | 39 / 50 (78.0%) | 50 / 50 (100.0%) | 0.220 | +0.020 | 39 / 5 / 6 |
 | `exp/3-apex-and-wave-impulse` | Wave Impulse + Post-Explosive Bounce Guard | 41 / 50 (82.0%) | 49 / 50 (98.0%) | 0.200 | -0.080 | 41 / 6 / 3 |
 | `exp/4-prominence-and-fatigue` | Valley Prominence + Deep-Fatigue Timeout | 40 / 50 (80.0%) | 49 / 50 (98.0%) | 0.220 | +0.060 | 40 / 3 / 7 |
-| **`feat/hybrid-v2-combined`** | **Combined Hybrid v2 Detector** | **50 / 50 (100.0%)** | **50 / 50 (100.0%)** | **0.000** | **+0.000** | **50 / 0 / 0** |
+| `feat/hybrid-v2-combined` | Combined Hybrid v2 Detector (50-set benchmark) | 50 / 50 (100.0%) | 50 / 50 (100.0%) | 0.000 | +0.000 | 50 / 0 / 0 |
+| **`exp/smoothed-y-visualization`** | **Pull-Up / Chin-Up Classifier & Full 56-set Dataset** | **55 / 56 (98.2%)** | **56 / 56 (100.0%)** | **0.018** | **-0.018** | **55 / 1 / 0** |
 
-- **Current Production Benchmark Metrics (`feat/hybrid-v2-combined`)**:
-  - **Exact Match Accuracy**: **50 / 50 (100.0%)**
-  - **Within-1 ($\pm 1$ Rep) Accuracy**: **50 / 50 (100.0%)**
-  - **Mean Absolute Error (MAE)**: **0.000 reps/set**
-  - **Mean Signed Error (Bias)**: **+0.000 reps/set** (429 vs 429 total reps)
-  - **Error Distribution**: Exact=50, Undercount=0, Overcount=0
-  - **Detector/Simulator Parity**: **50 / 50 (100.0% Exact Match)** between Monkey C `PullUpDetector.mc` and Python `eval_pipeline.py`.
+- **Current Active Benchmark Metrics (`exp/smoothed-y-visualization`)**:
+  - **Exact Match Accuracy**: **55 / 56 (98.2%)**
+  - **Within-1 ($\pm 1$ Rep) Accuracy**: **56 / 56 (100.0%)**
+  - **Mean Absolute Error (MAE)**: **0.018 reps/set**
+  - **Mean Signed Error (Bias)**: **-0.018 reps/set** (488 True vs 487 Detected reps; single undercount on Set #54 deep-fatigue rapid transition)
+  - **Error Distribution**: Exact=55, Undercount=1, Overcount=0
+  - **Automatic Exercise Classification**: Correctly distinguishes Pull-Up vs. Chin-Up across 100% of the dataset based on hang lateral tilt sign ($Y > +20\text{ mG}$ for Chin-Ups, $\le 0\text{ mG}$ for Pull-Ups).
 
 ---
 
 ## 6. Development & Testing Workflow
 - **Offline Pipeline Tools**:
   - `eval_pipeline.py`: Comprehensive test harness, canonical FSM, grid search tuning, and metrics reporting across all `.fit` sets.
-  - `detect_pullups.py`: Trace-enhanced detector (`simulate_with_trace`) and 3-row diagnostic visualizer.
-  - `generate_inspection_gallery.py`: Batch audit card generator into `inspection_gallery/` (DRY: imports `simulate_with_trace` directly from `detect_pullups.py`).
-  - `plot_dataset_errors.py`: Generates 4-quadrant dataset diagnostic dashboard saved to `dataset_analysis.png`.
+  - `detect_pullups.py`: Trace-enhanced detector (`simulate_with_trace`) and 3-row diagnostic visualizer including smoothed $Y$-axis tilt trace.
+  - `generate_inspection_gallery.py`: Batch audit card generator into `inspection_gallery/` featuring automated `[CHIN-UP]` vs `[PULL-UP]` badges.
+  - `plot_dataset_errors.py`: Generates dataset diagnostic dashboard.
 - **Closed-Loop Simulator Automation Pipeline**:
   - Comprehensive guide documented in [`SIMULATION.md`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/SIMULATION.md).
-  - **All-in-One Automated Runner**: [`run_sim_playback.ps1`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/run_sim_playback.ps1):
+  - **Production Runner**: [`run_sim_playback.ps1`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/run_sim_playback.ps1) (targets `bin/PullUp.prg`).
+  - **Beta Runner**: [`run_sim_playback_beta.ps1`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/run_sim_playback_beta.ps1) (builds & runs `bin/PullUp-Beta.prg` using `monkey-beta.jungle`, supporting `-FitFile -1` relative indexing).
     * Compiles Monkey C app via `monkeyc.bat` and launches via `monkeydo.bat`.
     * Dispatches [`sim_playback_worker.ps1`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/sim_playback_worker.ps1) in the interactive desktop session via Windows Task Scheduler configured with `-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries` for reliable execution on battery/unplugged laptops.
     * Adapts window positioning for 1536x864 (125% DPI) laptop screens: Simulator at `(20, 10, 740, 800)` and Activity Data dialog at `(780, 10, 480, 400)` side-by-side with zero overlap.
