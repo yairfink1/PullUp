@@ -1,6 +1,8 @@
 {
-    "description": "Train/Test2 dataset split. Train (90 sets) = original 60 train sets + 30 tuning sets from 2026-10-07..24. Test2 (3 sets) = pristine held-out sets recorded on 2026-10-25.",
+    "description": "Train/Test2 dataset split. Train (88 sets) = sets up to 2026-10-24 15:15 that were used during tuning. Test2 (5 sets) = pristine held-out sets (2 from 2026-10-24 19:51, 3 from 2026-10-25).",
     "test2": [
+        "2026-10-24-19-51-13.fit",
+        "2026-10-24-19-51-53.fit",
         "2026-10-25-08-24-07.fit",
         "2026-10-25-09-15-20.fit",
         "2026-10-25-09-19-42.fit"
