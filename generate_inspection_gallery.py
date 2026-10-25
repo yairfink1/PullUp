@@ -43,7 +43,8 @@ def load_test_set_names(workspace_dir: str) -> set:
     split_path = os.path.join(workspace_dir, "split.json")
     if os.path.isfile(split_path):
         with open(split_path, "r", encoding="utf-8") as f:
-            return set(json.load(f).get("test", []))
+            data = json.load(f)
+            return set(data.get("test2", data.get("test", [])))
     return set()
 
 
@@ -67,7 +68,7 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
 
     print(f"Loading dataset from: {data_path}")
     dataset, skipped = load_dataset(data_path, workspace_dir)
-    print(f"Loaded {len(dataset)} valid sets ({len(dataset) - len(test_names)} TRAIN, {len(test_names)} TEST). Generating inspection gallery in '{output_dir}/'...\n")
+    print(f"Loaded {len(dataset)} valid sets ({len(dataset) - len(test_names)} TRAIN, {len(test_names)} TEST2). Generating inspection gallery in '{output_dir}/'...\n")
 
     exact_matches = []
     suspect_matches = []
@@ -86,7 +87,7 @@ def generate_gallery(data_dir: str = "data", output_dir: str = "inspection_galle
         is_test = fname in test_names
         if is_test:
             test_idx += 1
-            split_tag = "TEST"
+            split_tag = "TEST2"
             split_idx = test_idx
         else:
             train_idx += 1

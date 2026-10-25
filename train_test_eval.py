@@ -23,7 +23,8 @@ SPLIT_PATH = os.path.join(WORKSPACE_DIR, "split.json")
 def load_split(dataset: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Partitions the loaded dataset into (train, test) using split.json."""
     with open(SPLIT_PATH, "r", encoding="utf-8") as f:
-        test_names = set(json.load(f)["test"])
+        data = json.load(f)
+        test_names = set(data.get("test2", data.get("test", [])))
 
     train = [item for item in dataset if item["filename"] not in test_names]
     test = [item for item in dataset if item["filename"] in test_names]
@@ -59,7 +60,7 @@ def main():
     dataset, _skipped = load_dataset(os.path.join(WORKSPACE_DIR, "data"), WORKSPACE_DIR)
     train, test = load_split(dataset)
 
-    for name, subset in (("TRAIN", train), ("TEST", test)):
+    for name, subset in (("TRAIN", train), ("TEST2", test)):
         metrics = evaluate_dataset(subset)
         print(format_metrics(name, metrics))
         if args.verbose:
