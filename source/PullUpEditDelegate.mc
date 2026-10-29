@@ -98,8 +98,14 @@ class PullUpEditDelegate extends WatchUi.BehaviorDelegate {
                 _session.stop();
             }
             if (_session != null) {
-                _session.save();
-                System.println("PullUpEditDelegate: FIT session saved.");
+                // Empty sets (0 reps) must not pollute Garmin Connect with blank activities.
+                if (reps > 0) {
+                    _session.save();
+                    System.println("PullUpEditDelegate: FIT session saved.");
+                } else {
+                    _session.discard();
+                    System.println("PullUpEditDelegate: 0 reps, FIT session discarded.");
+                }
                 _session = null;
             }
 

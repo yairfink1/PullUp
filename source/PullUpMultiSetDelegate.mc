@@ -202,7 +202,13 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
             if (_session.isRecording()) {
                 _session.stop();
             }
-            _session.save();
+            // Empty workouts (0 total reps) must not create blank Garmin Connect activities.
+            if (_totalReps > 0) {
+                _session.save();
+            } else {
+                _session.discard();
+                System.println("PullUpMultiSet: 0 total reps, workout discarded.");
+            }
             System.println("PullUpMultiSet: Workout finished & saved. Total reps: " + _totalReps);
             _session        = null;
             _sensorLogger   = null;

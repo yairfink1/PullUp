@@ -104,6 +104,7 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
 1. In Quick Set Mode, there is strictly **ONE LAP**. Do **NOT** call `session.addLap()`. Calling `addLap()` immediately before `stop()` creates an empty trailing lap that corrupts rep stats.
 2. Always call `_totalRepsField.setData(confirmedReps)` and `_lapRepsField.setData(confirmedReps)` with the final confirmed rep count **BEFORE** calling `session.stop()` and `session.save()`.
 3. Ensure fields are instantiated immediately upon `createSession()` and never nulled out before data is committed.
+4. **Empty Session Discard (0 Reps Guard)**: Any standalone quick set confirmed with 0 reps, or multi-set workout finished with 0 total reps, must call `session.discard()` instead of `session.save()` to prevent blank activities polluting Garmin Connect.
 
 ---
 
@@ -193,4 +194,4 @@ The app automatically counts pull-up repetitions live during a set at 100 Hz (ev
   - All pushes use standard Git HTTPS authentication via Windows Credential Manager.
 - **Workflow Conventions**:
   - Always verify detector parity and offline test suites before committing code changes.
-  - Commit messages must be concise, descriptive, and written in English.
+  - Commit messages must be concise, descriptive, and written in English.

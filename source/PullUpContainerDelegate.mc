@@ -510,7 +510,13 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
             if (_multiSession.isRecording()) {
                 _multiSession.stop();
             }
-            _multiSession.save();
+            // Empty workouts (0 total reps) must not create blank Garmin Connect activities.
+            if (_multiTotalReps > 0) {
+                _multiSession.save();
+            } else {
+                _multiSession.discard();
+                System.println("PullUpContainer: 0 total reps, workout discarded.");
+            }
             _multiSession        = null;
             _multiSensorLogger   = null;
             _multiTotalRepsField = null;
