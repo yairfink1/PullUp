@@ -124,13 +124,31 @@ def detect_with_channels(
     else:
         med_cadence = 140.0
 
+    # When base_reps has severe dropout (len(base_reps) <= 6, len(post_reps) - len(base_reps) >= 3,
+    # and med_cadence >= 185 due to multi-rep gaps), use post_reps median cadence if it is a normal
+    # single-rep cadence (>= 135 samples).
+    if len(base_reps) <= 6 and (len(post_reps) - len(base_reps)) >= 3 and med_cadence >= 185.0 and len(post_reps) >= 2:
+        post_sorted = sorted(post_reps)
+        med_post = float(np.median([post_sorted[k] - post_sorted[k-1] for k in range(1, len(post_sorted))]))
+        if med_post >= 135.0:
+            med_cadence = min(med_cadence, med_post)
+
     min_spacing = max(75, int(min_spacing_cadence * med_cadence))
+
+    # When all post_reps are 1-to-1 matched (len(matched_pairs) == len(post_reps)) on a short set
+    # (len(post_reps) <= 6) with 1 extra unmatched_base trigger, compute Step 4 spacing from
+    # confirmed_reps so the extra trigger does not split an interval and bias cadence downward.
+    min_spacing_step4 = min_spacing
+    if len(post_reps) <= 6 and len(base_reps) == len(post_reps) + 1 and len(matched_pairs) == len(post_reps) and len(confirmed_reps) >= 2:
+        conf_sorted = sorted(confirmed_reps)
+        med_conf = float(np.median([conf_sorted[k] - conf_sorted[k-1] for k in range(1, len(conf_sorted))]))
+        min_spacing_step4 = max(min_spacing, int(min_spacing_cadence * med_conf))
 
     # 4. Handle unmatched baseline triggers
     for b in unmatched_base:
         dt_close = min(abs(r - b) for r in confirmed_reps) if confirmed_reps else 999
         is_dismount_drop = (departure_sample - b) < dismount_margin
-        is_double_trigger = dt_close < min_spacing
+        is_double_trigger = dt_close < min_spacing_step4
 
         if is_dismount_drop or is_double_trigger:
             pruned_reps.append(b)
@@ -148,6 +166,7 @@ def detect_with_channels(
     #      only admit an unmatched peak if it fills an internal dropout gap on a short/medium set (< 7 reps).
     already_agreed = (len(base_reps) == len(post_reps) and len(confirmed_reps) == len(base_reps))
     last_confirmed = max(confirmed_reps) if confirmed_reps else 0
+    b_to_p = {b: p for b, p in matched_pairs}
 
     for p in unmatched_post:
         if x[p] > -550 or p >= (departure_sample - 25):
@@ -155,6 +174,13 @@ def detect_with_channels(
         # Reject terminal dismount arm-drop swings where X rapidly rises above -200 mG right after p
         if np.max(x[p:min(n, p + 35)]) > -200:
             continue
+        # For trailing peaks after last_confirmed, reject if within dismount_margin (45 samples) of departure
+        # or if base_reps already exceeds post_reps with zero pruned baseline triggers.
+        if confirmed_reps and p > last_confirmed:
+            if p >= (departure_sample - dismount_margin):
+                continue
+            if len(base_reps) > len(post_reps) and len(confirmed_reps) >= len(base_reps) and n_pruned_step4 == 0:
+                continue
         # Disallow trailing peak after last_confirmed if both channels had equal rep count and >= 7 reps
         if already_agreed and len(base_reps) >= 7 and p > last_confirmed:
             continue
@@ -180,13 +206,30 @@ def detect_with_channels(
         if len(confirmed_reps) < min_reps_for_post_addition:
             if len(post_reps) <= len(confirmed_reps):
                 continue
-            if p > last_confirmed and n_pruned_step4 == 0:
+            if p > last_confirmed and n_pruned_step4 == 0 and (len(post_reps) - len(base_reps)) < 3:
                 continue
 
         dt_close = min(abs(r - p) for r in confirmed_reps) if confirmed_reps else 999
         # Allow slightly tighter cadence spacing (0.65 * cadence, min 75) when a baseline trigger was pruned
         eff_spacing = max(75, int(0.65 * med_cadence)) if n_pruned_step4 > 0 else min_spacing
-        if dt_close >= eff_spacing:
+
+        # If p is an internal peak (r_prev < p < r_next) when post_reps > base_reps and dt_close is
+        # slightly below eff_spacing due to concentric-vs-Y-peak phase offset, check Y-peak-to-Y-peak
+        # spacing inside a genuine 2-rep dropout gap (p_next - p_prev >= max(242, 1.75 * med_cadence)).
+        spacing_ok = (dt_close >= eff_spacing)
+        if not spacing_ok and dt_close >= 84 and len(post_reps) > len(base_reps) and confirmed_reps:
+            less = [r for r in confirmed_reps if r < p]
+            greater = [r for r in confirmed_reps if r > p]
+            if less and greater:
+                r_prev = max(less)
+                r_next = min(greater)
+                p_prev = b_to_p.get(r_prev, r_prev)
+                p_next = b_to_p.get(r_next, r_next)
+                if (p_next - p_prev) >= max(242, int(1.75 * med_cadence)):
+                    if abs(p - p_prev) >= eff_spacing and abs(p_next - p) >= eff_spacing:
+                        spacing_ok = True
+
+        if spacing_ok:
             w_start = max(0, p - 35)
             w_end = min(n, p + 35)
             if np.max(envs[w_start:w_end]) >= min_env_for_post_addition:

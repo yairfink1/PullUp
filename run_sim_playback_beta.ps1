@@ -1,4 +1,4 @@
-# run_sim_playback_beta.ps1
+﻿# run_sim_playback_beta.ps1
 # Full automated closed-loop simulation & parity test runner for Pull-Up BETA on Garmin Connect IQ Simulator
 #
 # Usage:
@@ -8,7 +8,8 @@
 
 param(
     [string]$FitFile = "-1",
-    [int]$ExtraWaitSeconds = 4
+    [int]$ExtraWaitSeconds = 4,
+    [switch]$CaptureScreenshots
 )
 
 Set-StrictMode -Version Latest
@@ -16,16 +17,19 @@ $ErrorActionPreference = "Stop"
 
 $PROJECT = $PSScriptRoot
 
-# Support negative index (e.g. -1 for latest FIT in data/) or direct file path
-if ($FitFile -match "^-\d+$") {
+# Support integer index (e.g. -1 for latest, 1 for first, 2 for second) or direct file path
+if ($FitFile -match "^-?\d+$") {
     $idx = [int]$FitFile
     $dataFiles = @(Get-ChildItem -Path (Join-Path $PROJECT "data\*.fit") | Sort-Object Name)
     if ($dataFiles.Count -eq 0) {
         throw "No FIT files found in data/ directory."
     }
-    $targetIdx = $dataFiles.Count + $idx
+    if ($idx -eq 0) {
+        throw "Index cannot be 0. Use 1 for first file or -1 for last file."
+    }
+    $targetIdx = if ($idx -lt 0) { $dataFiles.Count + $idx } else { $idx - 1 }
     if ($targetIdx -lt 0 -or $targetIdx -ge $dataFiles.Count) {
-        throw "Index $FitFile out of range (found $($dataFiles.Count) files in data/)."
+        throw "Index $FitFile out of range (found $($dataFiles.Count) files in data/, valid range is 1..$($dataFiles.Count) or -$($dataFiles.Count)..-1)."
     }
     $fullFit = $dataFiles[$targetIdx].FullName
     $FitFile = "data\$($dataFiles[$targetIdx].Name)"
@@ -73,7 +77,7 @@ Write-Host "[1/6] Simulator is running (PID: $($simProc.Id))." -ForegroundColor 
 Write-Host "`n[2/6] Building and pushing PullUp-Beta.prg to simulator..." -ForegroundColor Yellow
 $SDK_BIN = "$env:APPDATA\Garmin\ConnectIQ\Sdks\connectiq-sdk-win-9.2.0-2026-06-09-92a1605b2\bin"
 & "$SDK_BIN\monkeyc.bat" -d fr165m -f (Join-Path $PROJECT "monkey-beta.jungle") -o (Join-Path $PROJECT "bin\PullUp-Beta.prg") -y (Join-Path $PROJECT "developer_key") | Out-Null
-Start-Process "$SDK_BIN\monkeydo.bat" -ArgumentList "bin/PullUp-Beta.prg", "fr165m" -WindowStyle Hidden
+Start-Process "$SDK_BIN\monkeydo.bat" -ArgumentList "bin/PullUp-Beta.prg", "fr165m" -WorkingDirectory $PROJECT -WindowStyle Hidden
 Start-Sleep -Seconds 4
 Write-Host "PullUp-Beta pushed and initialized at Glance view." -ForegroundColor Green
 
@@ -96,7 +100,8 @@ $wrapperScript = Join-Path $PROJECT "scratch\run_playback_wrapper.ps1"
 $workerLog = Join-Path $PROJECT "scratch\worker_output.log"
 Remove-Item $workerLog -ErrorAction SilentlyContinue
 
-$wrapperCode = "& `"$workerScript`" -FitFile `"$fullFit`" -DurationSeconds $durationS -ExtraWaitSeconds $ExtraWaitSeconds *>&1 | Out-File `"$workerLog`" -Encoding utf8"
+$captureArg = if ($CaptureScreenshots) { " -CaptureScreenshots" } else { "" }
+$wrapperCode = "& `"$workerScript`" -FitFile `"$fullFit`" -DurationSeconds $durationS -ExtraWaitSeconds $ExtraWaitSeconds$captureArg *>&1 | Out-File `"$workerLog`" -Encoding utf8"
 [IO.File]::WriteAllText($wrapperScript, $wrapperCode, [Text.Encoding]::UTF8)
 
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$wrapperScript`""

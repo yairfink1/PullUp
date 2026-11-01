@@ -18,6 +18,10 @@
     <!-- FitContributor developer fields -->
     <string id="FitTotalRepsLabel">Total Reps</string>
     <string id="FitSetRepsLabel">Set Reps</string>
+    <string id="FitPullUpRepsLabel">Pull-Up Reps</string>
+    <string id="FitChinUpRepsLabel">Chin-Up Reps</string>
+    <string id="FitExerciseLabel">Exercise Type</string>
+    <string id="FitExerciseUnitsLabel">0=Pull 1=Chin</string>
     <string id="FitUnitsLabel">reps</string>
 
     <!-- Multi-Set Workout strings -->

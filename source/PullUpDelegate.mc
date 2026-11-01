@@ -32,6 +32,9 @@ class PullUpDelegate extends WatchUi.BehaviorDelegate {
     private var _sensorLogger   as SensorLogging.SensorLogger?;
     private var _totalRepsField as FitContributor.Field?;
     private var _lapRepsField   as FitContributor.Field?;
+    private var _pullRepsField  as FitContributor.Field?;
+    private var _chinRepsField  as FitContributor.Field?;
+    private var _lapExField     as FitContributor.Field?;
 
     function initialize(view as PullUpView) {
         BehaviorDelegate.initialize();
@@ -130,16 +133,22 @@ class PullUpDelegate extends WatchUi.BehaviorDelegate {
             :sensorLogger => _sensorLogger
         });
 
-        // Developer FIT fields — no :nativeNum to avoid conflicts with native
-        // session/lap fields (e.g. nativeNum=7 collides with total_calories).
-        // Data appears under "Connect IQ" in Garmin Connect.
         _totalRepsField = _session.createField("Total Reps", 0, FitContributor.DATA_TYPE_UINT16,
             { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
         _lapRepsField   = _session.createField("Set Reps", 1, FitContributor.DATA_TYPE_UINT16,
             { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "reps" });
+        _pullRepsField  = _session.createField("Pull-Up Reps", 2, FitContributor.DATA_TYPE_UINT16,
+            { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
+        _chinRepsField  = _session.createField("Chin-Up Reps", 3, FitContributor.DATA_TYPE_UINT16,
+            { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
+        _lapExField     = _session.createField("Exercise Type", 4, FitContributor.DATA_TYPE_UINT8,
+            { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "0=Pull 1=Chin" });
 
         _lapRepsField.setData(0);
         _totalRepsField.setData(0);
+        _pullRepsField.setData(0);
+        _chinRepsField.setData(0);
+        _lapExField.setData(0);
 
         _session.start();
 
@@ -169,30 +178,42 @@ class PullUpDelegate extends WatchUi.BehaviorDelegate {
         }
 
         Sensor.unregisterSensorDataListener();
+        _detector.finalizeSet();
 
         var detectedReps = _detector.getRepCount();
+        var exName       = _detector.getExerciseName();
+        var isChin       = (_detector.getExerciseType() == EXERCISE_CHIN_UP);
         if (_lapRepsField != null) {
             _lapRepsField.setData(detectedReps);
         }
         if (_totalRepsField != null) {
             _totalRepsField.setData(detectedReps);
         }
+        if (_pullRepsField != null) {
+            _pullRepsField.setData(isChin ? 0 : detectedReps);
+        }
+        if (_chinRepsField != null) {
+            _chinRepsField.setData(isChin ? detectedReps : 0);
+        }
+        if (_lapExField != null) {
+            _lapExField.setData(isChin ? 1 : 0);
+        }
 
-        // Keep _session open so that the lap message remains active until
-        // the user confirms or adjusts the rep count on PullUpEditView.
         var sessionToPass = _session;
         _session      = null;
         _sensorLogger = null;
 
-        System.println("PullUpDelegate: Quick set stopped - detected reps: " + detectedReps);
+        System.println("PullUpDelegate: Quick set stopped - detected reps: " + detectedReps + " (" + exName + ")");
 
         // Push confirmation screen with detected exercise name.
-        var exName       = _detector.getExerciseName();
         var editView     = new PullUpEditView(detectedReps, false, 1, exName);
         var editDelegate = new PullUpEditDelegate(editView, sessionToPass, null, false, 1);
-        editDelegate.setFitFields(_totalRepsField, _lapRepsField);
+        editDelegate.setFitFields(_totalRepsField, _lapRepsField, _pullRepsField, _chinRepsField, _lapExField);
         _totalRepsField = null;
         _lapRepsField   = null;
+        _pullRepsField  = null;
+        _chinRepsField  = null;
+        _lapExField     = null;
 
         WatchUi.pushView(editView, editDelegate, WatchUi.SLIDE_UP);
     }

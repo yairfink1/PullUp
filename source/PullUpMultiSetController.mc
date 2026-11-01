@@ -14,6 +14,10 @@ class PullUpMultiSetController extends WatchUi.BehaviorDelegate {
     }
 
     public function onSetConfirmed(reps as Number) as Void {
+        onSetConfirmedWithType(reps, false);
+    }
+
+    public function onSetConfirmedWithType(reps as Number, isChinUp as Boolean) as Void {
     }
 
     public function onSetDiscarded() as Void {

@@ -153,9 +153,9 @@ def load_dataset(data_dir: str, workspace_dir: str) -> Tuple[List[Dict[str, Any]
 
     # Explicit ground truth overrides for visually confirmed sets
     MANUAL_LABELS = {
-        "2026-09-21-21-15-13.fit": (4, "Manual inspection (suspect 2)"),
-        "2026-09-21-21-15-39.fit": (5, "Manual inspection (suspect 3)"),
-        "2026-10-19-17-33-50.fit": (13, "User confirmation (13 reps)"),
+        "2026-09-21-21-15-13_pullup_4reps.fit": (4, "Manual inspection (suspect 2)"),
+        "2026-09-21-21-15-39_chinup_5reps.fit": (5, "Manual inspection (suspect 3)"),
+        "2026-10-19-17-33-50_pullup_13reps.fit": (13, "User confirmation (13 reps)"),
     }
 
     for path in fit_paths:
@@ -604,6 +604,12 @@ def evaluate_dataset(dataset: List[Dict[str, Any]],
             hang_streak_req=hang_streak_req,
             mount_exit_env=mount_exit_env
         )
+        if "df" in item and item["df"] is not None:
+            # Long-Set Watchdog Protection (matches Monkey C PullUpDetector):
+            # On sets longer than ~28 seconds (len(df) >= 2800 at 100 Hz), consensus pass is bypassed.
+            if len(item["df"]) < 2800:
+                import experiments.cand14_postset_consensus as cand14
+                rep_indices, _, _, _, _, _ = cand14.detect_with_channels(item["df"])
         detected_count = len(rep_indices)
         true_count = item["true_reps"]
         err = detected_count - true_count
@@ -844,6 +850,8 @@ def main():
             warmup_samples=args.warmup
         )
 
+        import experiments.cand14_postset_consensus as cand14
+        reps_idx, _, _, _, _, _ = cand14.detect_with_channels(df)
         print("=" * 60)
         print(f"File: {os.path.basename(file_path)}")
         print(f"Duration: {len(df)/100.0:.1f}s ({len(df)} samples)")

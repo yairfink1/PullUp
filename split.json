@@ -1,10 +1,34 @@
 {
-    "description": "Train/Test2 dataset split. Train (88 sets) = sets up to 2026-10-24 15:15 that were used during tuning. Test2 (5 sets) = pristine held-out sets (2 from 2026-10-24 19:51, 3 from 2026-10-25).",
-    "test2": [
-        "2026-10-24-19-51-13.fit",
-        "2026-10-24-19-51-53.fit",
-        "2026-10-25-08-24-07.fit",
-        "2026-10-25-09-15-20.fit",
-        "2026-10-25-09-19-42.fit"
+    "description": "Train = all sets up to 2026-10-31 (Test2 round 1 with 28 sets merged into Train on 2026-11-01). Test2 = new pristine held-out sets recorded after 2026-10-31 21:42.",
+    "test2": [],
+    "merged_into_train_2026_11_01": [
+        "2026-10-24-19-51-13_chinup_11reps.fit",
+        "2026-10-24-19-51-53_pullup_3reps.fit",
+        "2026-10-25-08-24-07_chinup_9reps.fit",
+        "2026-10-25-09-15-20_pullup_7reps.fit",
+        "2026-10-25-09-19-42_chinup_4reps.fit",
+        "2026-10-25-14-30-12_chinup_10reps_24847839824.fit",
+        "2026-10-25-14-31-42_pullup_5reps_24847840404.fit",
+        "2026-10-25-15-21-15_chinup_8reps_24848431707.fit",
+        "2026-10-25-15-21-40_pullup_7reps_24848432467.fit",
+        "2026-10-25-16-22-14_chinup_12reps_24849154241.fit",
+        "2026-10-25-19-26-33_pullup_5reps_24850838182.fit",
+        "2026-10-25-19-28-08_chinup_3reps_24850848168.fit",
+        "2026-10-25-21-54-01_chinup_10reps_24851731320.fit",
+        "2026-10-26-15-16-43_chinup_5reps_24858167317.fit",
+        "2026-10-26-16-39-45_pullup_20reps_24859085803.fit",
+        "2026-10-28-15-58-28_chinup_25reps_24883002799.fit",
+        "2026-10-29-06-08-41_chinup_22reps_24889276026.fit",
+        "2026-10-29-16-37-10_pullup_20reps_24895167860.fit",
+        "2026-10-29-17-35-33_chinup_8reps_24895895953.fit",
+        "2026-10-29-22-29-19_chinup_14reps_24898786076.fit",
+        "2026-10-29-22-30-10_chinup_6reps_24898790738.fit",
+        "2026-10-30-10-01-35_chinup_10reps_24902596799.fit",
+        "2026-10-30-10-02-28_pullup_10reps_24902597319.fit",
+        "2026-10-30-21-36-23_chinup_13reps_24909614180.fit",
+        "2026-10-30-21-37-56_pullup_7reps_24909617700.fit",
+        "2026-10-31-20-13-00_chinup_5reps_24921436848.fit",
+        "2026-10-31-21-40-37_pullup_10reps_24921936928.fit",
+        "2026-10-31-21-42-15_chinup_4reps_24921944389.fit"
     ]
 }

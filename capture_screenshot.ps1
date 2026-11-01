@@ -148,7 +148,7 @@ public class SimCaptureV3 {
     public static void FocusWindow(IntPtr hWnd) {
         CloseModalDialogs();
         ShowWindow(hWnd, 9);       // SW_RESTORE
-        EnsureWindowSize(hWnd, 740, 800);
+        EnsureWindowSize(hWnd, 740, 1020);
         SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
         SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
         BringWindowToTop(hWnd);

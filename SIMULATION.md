@@ -166,23 +166,39 @@ The watch application advances through four distinct screens via screen taps (or
 5. **Stop and Save the Set**:
    - Once playback finishes, tap the watch face to stop recording. The screen displays **"SET COMPLETE: X"**.
 
-#### Automated Runner: `run_sim_playback.ps1`
+#### Automated Runners: `run_sim_playback_beta.ps1`, `run_sim_playback.ps1`, & `test_all_beta.ps1`
 
-An all-in-one PowerShell script [`run_sim_playback.ps1`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/run_sim_playback.ps1) automates the entire sequence above:
+All-in-one PowerShell scripts automate the entire sequence above in the background without stealing window focus or moving your mouse cursor:
+
 ```powershell
-.\run_sim_playback.ps1 -FitFile "data\2026-10-04-10-12-50.fit"
+# Run Beta build on the latest .fit file in data/ (default -1):
+.\run_sim_playback_beta.ps1 -FitFile -1
+
+# Run Beta build on the 2nd .fit file from the start of data/:
+.\run_sim_playback_beta.ps1 -FitFile 2
+
+# Run Beta build on a specific .fit file path:
+.\run_sim_playback_beta.ps1 -FitFile "data\2026-10-04-10-12-50_pullup_17reps.fit"
+
+# Run Production build:
+.\run_sim_playback.ps1 -FitFile -1
+
+# Run the full training dataset batch parity suite (saves screenshots to sim_images\final_set_completer_<x>.png):
+.\test_all_beta.ps1
+.\test_all_beta.ps1 -StartIndex 53
+.\test_all_beta.ps1 -StartIndex 10 -EndIndex 25
 ```
-This script automatically:
+
+This pipeline automatically:
 1. Builds the Monkey C app (`monkeyc.bat`) and launches the simulator (`monkeydo.bat`).
-2. Dispatches [`sim_playback_worker.ps1`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/sim_playback_worker.ps1) via Windows Task Scheduler into the user's interactive desktop session.
-3. Positions the simulator at `(50, 50, 760, 920)` and the Activity Data dialog at `(830, 50, 480, 420)` side-by-side to guarantee **zero window overlap**.
-4. Selects **FIT/GPX Playable File** and safely loads the target `.fit` file into the Activity Data dialog without shortcut collisions.
-5. Taps Glance and starts recording on the watch.
-6. Clicks the Play button to stream the 100 Hz accelerometer data.
-7. Captures a mid-workout snapshot ([`mid_workout_reps.png`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/mid_workout_reps.png)) showing live incrementing reps.
-8. Stops recording, captures the final confirmation view ([`final_set_complete.png`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/final_set_complete.png)), and saves the session.
-9. Parses the resulting activity FIT file via [`read_fit_reps.py`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/read_fit_reps.py).
-10. Runs offline [`eval_pipeline.py`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/eval_pipeline.py) on the input file and verifies 100% closed-loop parity.
+2. Dispatches [`sim_playback_worker.ps1`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/sim_playback_worker.ps1) via Windows Task Scheduler (`Hidden` window style).
+3. Positions windows at `HWND_BOTTOM` with `SWP_NOACTIVATE` so it never steals focus or interrupts work—even across Windows Virtual Desktops.
+4. Selects option `0` (**FIT/GPX Playable File**) via background `WM_KEYDOWN` (`VK_HOME`) so wxWidgets enables the **Load File** button (`ID=1`), then populates the Open dialog's inner `Edit` control (`ID=1001` inside `ComboBoxEx32` `ID=1148`) via `WM_SETTEXT` + `VK_RETURN`.
+5. Taps Glance and starts recording on the watch via background `PostMessage` clicks to the child `panel` canvas.
+6. Clicks the Play button (`ID=11`) via `BM_CLICK` to stream the 100 Hz accelerometer data.
+7. Captures a mid-workout snapshot ([`mid_workout_reps.png`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/mid_workout_reps.png)) and final confirmation view ([`final_set_complete.png`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/final_set_complete.png)) via background `PrintWindow` (`PW_RENDERFULLCONTENT = 2`).
+8. Parses the resulting activity FIT file via [`read_fit_reps.py`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/read_fit_reps.py).
+9. Runs offline [`eval_pipeline.py`](file:///c:/Users/TLP-001/Documents/Garmin/PullUp/eval_pipeline.py) on the input file and verifies 100% closed-loop parity.
 
 > [!IMPORTANT]
 > **Simulator GUI Automation Safety Rules**:

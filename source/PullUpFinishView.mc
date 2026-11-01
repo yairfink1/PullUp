@@ -30,7 +30,7 @@ class PullUpFinishView extends WatchUi.View {
 
         // 1. Title
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (h * 0.11).toNumber(), Graphics.FONT_SMALL, "FINISH WORKOUT?", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.14).toNumber(), Graphics.FONT_TINY, "WORKOUT DONE?", Graphics.TEXT_JUSTIFY_CENTER);
 
         // 2. Large Total Reps
         dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
@@ -38,13 +38,14 @@ class PullUpFinishView extends WatchUi.View {
 
         // 3. Caption
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (h * 0.59).toNumber(), Graphics.FONT_TINY, "TOTAL REPS COMPLETED", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.59).toNumber(), Graphics.FONT_XTINY, "Total Reps", Graphics.TEXT_JUSTIFY_CENTER);
 
         // 4. Instructions
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (h * 0.69).toNumber(), Graphics.FONT_XTINY, "START = Save & Exit", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.69).toNumber(), Graphics.FONT_XTINY, "START: Save Workout", Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (h * 0.82).toNumber(), Graphics.FONT_XTINY, "DOWN = Resume Rest | BACK = Discard", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.77).toNumber(), Graphics.FONT_XTINY, "DOWN: Resume Rest", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.85).toNumber(), Graphics.FONT_XTINY, "BACK: Discard", Graphics.TEXT_JUSTIFY_CENTER);
     }
 }

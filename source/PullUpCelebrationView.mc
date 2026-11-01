@@ -99,6 +99,6 @@ class PullUpCelebrationView extends WatchUi.View {
         // 5. Dismiss Hint
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
         var hintY = (h * 0.85).toNumber();
-        dc.drawText(cx, hintY, Graphics.FONT_XTINY, "Press any key to dismiss", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, hintY, Graphics.FONT_XTINY, "Any key to close", Graphics.TEXT_JUSTIFY_CENTER);
     }
 }

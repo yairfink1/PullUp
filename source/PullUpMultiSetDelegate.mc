@@ -14,8 +14,8 @@ import Toybox.SensorLogging;
 //
 // Key Features:
 //   - Continuous ActivityRecording session across multiple sets.
-//   - Writes FitContributor Lap Developer Fields for each set.
-//   - Writes FitContributor Session Developer Field at workout finish.
+//   - Writes FitContributor Lap Developer Fields for each set (Set Reps + Exercise Type).
+//   - Writes FitContributor Session Developer Fields at workout finish (Total, Pull-Up, Chin-Up Reps).
 //   - Seamless transition to Rest screen between sets.
 //   - Switching back to Single Quick Set view via UP when idle.
 // ---------------------------------------------------------------------------
@@ -27,6 +27,8 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
     // Multi-set state.
     private var _currentSet   as Number = 1;
     private var _totalReps    as Number = 0;
+    private var _pullReps     as Number = 0;
+    private var _chinReps     as Number = 0;
     private var _isRecording  as Boolean = false;
     private var _hapticPending as Boolean = false;
 
@@ -40,6 +42,9 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
     private var _sensorLogger   as SensorLogging.SensorLogger?;
     private var _totalRepsField as FitContributor.Field?;
     private var _lapRepsField   as FitContributor.Field?;
+    private var _pullRepsField  as FitContributor.Field?;
+    private var _chinRepsField  as FitContributor.Field?;
+    private var _lapExField     as FitContributor.Field?;
 
     function initialize(view as PullUpMultiSetView) {
         BehaviorDelegate.initialize();
@@ -85,13 +90,22 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
                 :sensorLogger => _sensorLogger
             });
 
-            // Developer FIT fields — no :nativeNum to avoid conflicts with native
-            // session/lap fields (e.g. nativeNum=7 collides with total_calories).
-            // Data appears under "Connect IQ" in Garmin Connect.
             _totalRepsField = _session.createField("Total Reps", 0, FitContributor.DATA_TYPE_UINT16,
                 { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
             _lapRepsField   = _session.createField("Set Reps", 1, FitContributor.DATA_TYPE_UINT16,
                 { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "reps" });
+            _pullRepsField  = _session.createField("Pull-Up Reps", 2, FitContributor.DATA_TYPE_UINT16,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
+            _chinRepsField  = _session.createField("Chin-Up Reps", 3, FitContributor.DATA_TYPE_UINT16,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
+            _lapExField     = _session.createField("Exercise Type", 4, FitContributor.DATA_TYPE_UINT8,
+                { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "0=Pull 1=Chin" });
+
+            _totalRepsField.setData(0);
+            _lapRepsField.setData(0);
+            _pullRepsField.setData(0);
+            _chinRepsField.setData(0);
+            _lapExField.setData(0);
 
             _session.start();
             System.println("PullUpMultiSet: Session started.");
@@ -135,6 +149,7 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
         }
 
         Sensor.unregisterSensorDataListener();
+        _detector.finalizeSet();
 
         var detectedReps = _detector.getRepCount();
         System.println("PullUpMultiSet: Set " + _currentSet + " stopped. Reps detected: " + detectedReps);
@@ -147,22 +162,40 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
     }
 
     // Called by PullUpEditDelegate when set is confirmed.
-    public function onSetConfirmed(confirmedReps as Number) as Void {
+    public function onSetConfirmedWithType(confirmedReps as Number, isChinUp as Boolean) as Void {
+        _totalReps += confirmedReps;
+        if (isChinUp) {
+            _chinReps += confirmedReps;
+        } else {
+            _pullReps += confirmedReps;
+        }
+
         if (_session != null && _session.isRecording()) {
             if (_lapRepsField != null) {
                 _lapRepsField.setData(confirmedReps);
             }
+            if (_lapExField != null) {
+                _lapExField.setData(isChinUp ? 1 : 0);
+            }
+            if (_totalRepsField != null) {
+                _totalRepsField.setData(_totalReps);
+            }
+            if (_pullRepsField != null) {
+                _pullRepsField.setData(_pullReps);
+            }
+            if (_chinRepsField != null) {
+                _chinRepsField.setData(_chinReps);
+            }
             _session.addLap();
         }
 
-        _totalReps += confirmedReps;
         PullUpStorage.addReps(confirmedReps);
 
         var finishedSet = _currentSet;
         _currentSet++;
 
         System.println("PullUpMultiSet: Set " + finishedSet + " confirmed with " + confirmedReps
-                       + " reps. Total workout reps: " + _totalReps);
+                       + " reps (" + (isChinUp ? "CHIN UP" : "PULL UP") + "). Total workout reps: " + _totalReps);
 
         // Transition to live rest screen.
         var restView     = new PullUpRestView(confirmedReps, _totalReps, _currentSet);
@@ -199,6 +232,12 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
             if (_totalRepsField != null) {
                 _totalRepsField.setData(_totalReps);
             }
+            if (_pullRepsField != null) {
+                _pullRepsField.setData(_pullReps);
+            }
+            if (_chinRepsField != null) {
+                _chinRepsField.setData(_chinReps);
+            }
             if (_session.isRecording()) {
                 _session.stop();
             }
@@ -209,15 +248,21 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
                 _session.discard();
                 System.println("PullUpMultiSet: 0 total reps, workout discarded.");
             }
-            System.println("PullUpMultiSet: Workout finished & saved. Total reps: " + _totalReps);
+            System.println("PullUpMultiSet: Workout finished & saved. Total reps: " + _totalReps
+                           + " (Pull: " + _pullReps + ", Chin: " + _chinReps + ")");
             _session        = null;
             _sensorLogger   = null;
             _totalRepsField = null;
             _lapRepsField   = null;
+            _pullRepsField  = null;
+            _chinRepsField  = null;
+            _lapExField     = null;
         }
 
         _currentSet = 1;
         _totalReps  = 0;
+        _pullReps   = 0;
+        _chinReps   = 0;
         _updateIdleView();
     }
 
@@ -230,10 +275,15 @@ class PullUpMultiSetDelegate extends PullUpMultiSetController {
             _sensorLogger   = null;
             _totalRepsField = null;
             _lapRepsField   = null;
+            _pullRepsField  = null;
+            _chinRepsField  = null;
+            _lapExField     = null;
         }
 
         _currentSet = 1;
         _totalReps  = 0;
+        _pullReps   = 0;
+        _chinReps   = 0;
         _updateIdleView();
     }
 

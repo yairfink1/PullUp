@@ -367,9 +367,9 @@ def extract_true_reps(fit_path: str) -> Optional[int]:
     """
     fname = os.path.basename(fit_path)
     manual_labels = {
-        "2026-09-21-21-15-13.fit": 4,
-        "2026-09-21-21-15-39.fit": 5,
-        "2026-10-19-17-33-50.fit": 13,
+        "2026-09-21-21-15-13_pullup_4reps.fit": 4,
+        "2026-09-21-21-15-39_chinup_5reps.fit": 5,
+        "2026-10-19-17-33-50_pullup_13reps.fit": 13,
     }
     if fname in manual_labels:
         return manual_labels[fname]

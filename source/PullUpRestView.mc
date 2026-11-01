@@ -54,10 +54,11 @@ class PullUpRestView extends WatchUi.View {
 
         // 4. Total Workout Reps & Next Set Preview
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (h * 0.65).toNumber(), Graphics.FONT_TINY, "Total: " + _totalReps + " reps (Next: Set " + _currentSet + ")", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.65).toNumber(), Graphics.FONT_XTINY, "Total: " + _totalReps + " reps", Graphics.TEXT_JUSTIFY_CENTER);
 
         // 5. Button Hints
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (h * 0.82).toNumber(), Graphics.FONT_XTINY, "START = Start Set " + _currentSet + " | BACK = Finish", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.76).toNumber(), Graphics.FONT_XTINY, "START: Set " + _currentSet, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.85).toNumber(), Graphics.FONT_XTINY, "BACK to Finish", Graphics.TEXT_JUSTIFY_CENTER);
     }
 }

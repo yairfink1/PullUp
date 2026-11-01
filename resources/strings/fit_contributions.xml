@@ -13,5 +13,23 @@
                   precision="0"
                   dataLabel="@Strings.FitSetRepsLabel"
                   unitLabel="@Strings.FitUnitsLabel" />
+        <fitField id="2"
+                  displayInActivitySummary="true"
+                  sortOrder="2"
+                  precision="0"
+                  dataLabel="@Strings.FitPullUpRepsLabel"
+                  unitLabel="@Strings.FitUnitsLabel" />
+        <fitField id="3"
+                  displayInActivitySummary="true"
+                  sortOrder="3"
+                  precision="0"
+                  dataLabel="@Strings.FitChinUpRepsLabel"
+                  unitLabel="@Strings.FitUnitsLabel" />
+        <fitField id="4"
+                  displayInActivityLaps="true"
+                  sortOrder="4"
+                  precision="0"
+                  dataLabel="@Strings.FitExerciseLabel"
+                  unitLabel="@Strings.FitExerciseUnitsLabel" />
     </fitContributions>
 </resources>

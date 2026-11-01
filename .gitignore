@@ -26,6 +26,7 @@ venv/
 # Scratch & runtime logs
 scratch/
 *.log
+*.zip
 capture_status.txt
 
 # OS / Editor files

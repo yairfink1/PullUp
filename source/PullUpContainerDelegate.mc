@@ -36,11 +36,16 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
     private var _quickSensorLogger   as SensorLogging.SensorLogger?;
     private var _quickTotalRepsField as FitContributor.Field?;
     private var _quickLapRepsField   as FitContributor.Field?;
+    private var _quickPullRepsField  as FitContributor.Field?;
+    private var _quickChinRepsField  as FitContributor.Field?;
+    private var _quickLapExField     as FitContributor.Field?;
 
     // --- Page 1 (Multi-Set) Workout Engine ---
     private var _multiDetector       as PullUpDetector;
     private var _multiCurrentSet     as Number = 1;
     private var _multiTotalReps      as Number = 0;
+    private var _multiPullReps       as Number = 0;
+    private var _multiChinReps       as Number = 0;
     private var _multiIsRecording    as Boolean = false;
     private var _multiHapticPending  as Boolean = false;
     private var _multiUiTimer        as Timer.Timer?;
@@ -50,6 +55,9 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
     private var _multiSensorLogger   as SensorLogging.SensorLogger?;
     private var _multiTotalRepsField as FitContributor.Field?;
     private var _multiLapRepsField   as FitContributor.Field?;
+    private var _multiPullRepsField  as FitContributor.Field?;
+    private var _multiChinRepsField  as FitContributor.Field?;
+    private var _multiLapExField     as FitContributor.Field?;
 
     function initialize(view as PullUpContainerView) {
         BehaviorDelegate.initialize();
@@ -96,7 +104,7 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
                 }
 
                 _view.setScrollY(newScrollY);
-                _view.resetIndicatorTimer();
+                _view.markInteraction();
                 WatchUi.requestUpdate();
                 return true;
             }
@@ -139,11 +147,12 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
     }
 
     private function _animateToY(targetY as Number) as Void {
-        _stopAnimation();
         _view.setTargetScrollY(targetY);
-
-        _animTimer = new Timer.Timer();
-        _animTimer.start(method(:_onAnimStep), 16, true); // ~60 fps
+        if (_animTimer == null) {
+            _animTimer = new Timer.Timer();
+        }
+        _animTimer.stop();
+        _animTimer.start(method(:_onAnimStep), 12, true);
     }
 
     public function _onAnimStep() as Void {
@@ -151,7 +160,7 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         var target = _view.getTargetScrollY();
         var diff = target - curr;
 
-        if (diff.abs() <= 3) {
+        if (diff.abs() <= 8) {
             _view.setScrollY(target);
             _stopAnimation();
             _view.resetIndicatorTimer();
@@ -159,14 +168,14 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
             return;
         }
 
-        // Spring/ease-out step
-        var step = diff / 3;
-        if (step == 0) {
-            step = (diff > 0) ? 1 : -1;
+        // Fast, snappy ease-out (55% per tick + minimum 12px velocity floor)
+        var step = (diff * 55) / 100;
+        if (step.abs() < 12) {
+            step = (diff > 0) ? 12 : -12;
         }
 
         _view.setScrollY(curr + step);
-        _view.resetIndicatorTimer();
+        _view.markInteraction();
         WatchUi.requestUpdate();
     }
 
@@ -268,9 +277,18 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
             { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
         _quickLapRepsField   = _quickSession.createField("Set Reps", 1, FitContributor.DATA_TYPE_UINT16,
             { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "reps" });
+        _quickPullRepsField  = _quickSession.createField("Pull-Up Reps", 2, FitContributor.DATA_TYPE_UINT16,
+            { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
+        _quickChinRepsField  = _quickSession.createField("Chin-Up Reps", 3, FitContributor.DATA_TYPE_UINT16,
+            { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
+        _quickLapExField     = _quickSession.createField("Exercise Type", 4, FitContributor.DATA_TYPE_UINT8,
+            { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "0=Pull 1=Chin" });
 
         _quickLapRepsField.setData(0);
         _quickTotalRepsField.setData(0);
+        _quickPullRepsField.setData(0);
+        _quickChinRepsField.setData(0);
+        _quickLapExField.setData(0);
         _quickSession.start();
 
         Sensor.registerSensorDataListener(method(:onQuickSensorData), {
@@ -296,14 +314,25 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         }
 
         Sensor.unregisterSensorDataListener();
+        _quickDetector.finalizeSet();
 
         var detectedReps = _quickDetector.getRepCount();
         var exName       = _quickDetector.getExerciseName();
+        var isChin       = (_quickDetector.getExerciseType() == EXERCISE_CHIN_UP);
         if (_quickLapRepsField != null) {
             _quickLapRepsField.setData(detectedReps);
         }
         if (_quickTotalRepsField != null) {
             _quickTotalRepsField.setData(detectedReps);
+        }
+        if (_quickPullRepsField != null) {
+            _quickPullRepsField.setData(isChin ? 0 : detectedReps);
+        }
+        if (_quickChinRepsField != null) {
+            _quickChinRepsField.setData(isChin ? detectedReps : 0);
+        }
+        if (_quickLapExField != null) {
+            _quickLapExField.setData(isChin ? 1 : 0);
         }
 
         var sessionToPass = _quickSession;
@@ -315,7 +344,13 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
 
         var editView     = new PullUpEditView(detectedReps, false, 1, exName);
         var editDelegate = new PullUpEditDelegate(editView, sessionToPass, null, false, 1);
-        editDelegate.setFitFields(_quickTotalRepsField, _quickLapRepsField);
+        editDelegate.setFitFields(
+            _quickTotalRepsField,
+            _quickLapRepsField,
+            _quickPullRepsField,
+            _quickChinRepsField,
+            _quickLapExField
+        );
 
         WatchUi.pushView(editView, editDelegate, WatchUi.SLIDE_UP);
     }
@@ -343,7 +378,6 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         } else {
             _view.setQuickStatus(exName);
         }
-
 
         _view.setQuickRepCount(reps);
         _view.setQuickElapsedTime(timeStr);
@@ -410,6 +444,18 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
                 { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
             _multiLapRepsField   = _multiSession.createField("Set Reps", 1, FitContributor.DATA_TYPE_UINT16,
                 { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "reps" });
+            _multiPullRepsField  = _multiSession.createField("Pull-Up Reps", 2, FitContributor.DATA_TYPE_UINT16,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
+            _multiChinRepsField  = _multiSession.createField("Chin-Up Reps", 3, FitContributor.DATA_TYPE_UINT16,
+                { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "reps" });
+            _multiLapExField     = _multiSession.createField("Exercise Type", 4, FitContributor.DATA_TYPE_UINT8,
+                { :mesgType => FitContributor.MESG_TYPE_LAP, :units => "0=Pull 1=Chin" });
+
+            _multiTotalRepsField.setData(0);
+            _multiLapRepsField.setData(0);
+            _multiPullRepsField.setData(0);
+            _multiChinRepsField.setData(0);
+            _multiLapExField.setData(0);
 
             _multiSession.start();
         }
@@ -442,6 +488,7 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         }
 
         Sensor.unregisterSensorDataListener();
+        _multiDetector.finalizeSet();
 
         var detectedReps = _multiDetector.getRepCount();
         var exName       = _multiDetector.getExerciseName();
@@ -453,20 +500,37 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         WatchUi.pushView(editView, editDelegate, WatchUi.SLIDE_UP);
     }
 
+    public function onSetConfirmedWithType(confirmedReps as Number, isChinUp as Boolean) as Void {
+        _multiTotalReps += confirmedReps;
+        if (isChinUp) {
+            _multiChinReps += confirmedReps;
+        } else {
+            _multiPullReps += confirmedReps;
+        }
 
-    public function onSetConfirmed(confirmedReps as Number) as Void {
         if (_multiSession != null && _multiSession.isRecording()) {
             if (_multiLapRepsField != null) {
                 _multiLapRepsField.setData(confirmedReps);
             }
+            if (_multiLapExField != null) {
+                _multiLapExField.setData(isChinUp ? 1 : 0);
+            }
+            if (_multiTotalRepsField != null) {
+                _multiTotalRepsField.setData(_multiTotalReps);
+            }
+            if (_multiPullRepsField != null) {
+                _multiPullRepsField.setData(_multiPullReps);
+            }
+            if (_multiChinRepsField != null) {
+                _multiChinRepsField.setData(_multiChinReps);
+            }
             _multiSession.addLap();
         }
 
-        _multiTotalReps += confirmedReps;
         var setPrBeaten = PullUpStorage.checkSetPr(confirmedReps);
         PullUpStorage.addReps(confirmedReps);
+        _view.refreshCachedStats();
 
-        var finishedSet = _multiCurrentSet;
         _multiCurrentSet++;
 
         var restView     = new PullUpRestView(confirmedReps, _multiTotalReps, _multiCurrentSet);
@@ -507,6 +571,12 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
             if (_multiTotalRepsField != null) {
                 _multiTotalRepsField.setData(_multiTotalReps);
             }
+            if (_multiPullRepsField != null) {
+                _multiPullRepsField.setData(_multiPullReps);
+            }
+            if (_multiChinRepsField != null) {
+                _multiChinRepsField.setData(_multiChinReps);
+            }
             if (_multiSession.isRecording()) {
                 _multiSession.stop();
             }
@@ -521,12 +591,18 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
             _multiSensorLogger   = null;
             _multiTotalRepsField = null;
             _multiLapRepsField   = null;
+            _multiPullRepsField  = null;
+            _multiChinRepsField  = null;
+            _multiLapExField     = null;
         }
 
         var prResult = PullUpStorage.checkDayOrWeekPr();
+        _view.refreshCachedStats();
 
         _multiCurrentSet = 1;
         _multiTotalReps  = 0;
+        _multiPullReps   = 0;
+        _multiChinReps   = 0;
         _view.setMultiRecording(false);
         _view.setMultiSetNum(1);
         _view.setMultiSetReps(0);
@@ -551,10 +627,15 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
             _multiSensorLogger   = null;
             _multiTotalRepsField = null;
             _multiLapRepsField   = null;
+            _multiPullRepsField  = null;
+            _multiChinRepsField  = null;
+            _multiLapExField     = null;
         }
 
         _multiCurrentSet = 1;
         _multiTotalReps  = 0;
+        _multiPullReps   = 0;
+        _multiChinReps   = 0;
         _view.setMultiRecording(false);
         _view.setMultiSetNum(1);
         _view.setMultiSetReps(0);
@@ -585,7 +666,6 @@ class PullUpContainerDelegate extends PullUpMultiSetController {
         } else {
             statusInfo = _multiDetector.getExerciseName() + " | S: " + _multiDetector.getSampleCount();
         }
-
 
         _view.setMultiRecording(true);
         _view.setMultiSetNum(_multiCurrentSet);

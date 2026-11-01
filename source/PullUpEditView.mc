@@ -3,7 +3,7 @@ import Toybox.Lang;
 import Toybox.WatchUi;
 
 // ---------------------------------------------------------------------------
-// PullUpEditView - post-set confirmation and rep adjustment screen.
+// PullUpEditView - post-set confirmation, rep adjustment, and exercise toggle.
 // ---------------------------------------------------------------------------
 class PullUpEditView extends WatchUi.View {
 
@@ -34,10 +34,10 @@ class PullUpEditView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.clear();
 
-        // 1. Title with dynamic exercise name: "PULL UP COMPLETE" or "CHIN UP COMPLETE" / "SET 1: CHIN UP"
+        // 1. Title with dynamic exercise name: "PULL UP DONE" or "CHIN UP DONE" / "SET 1: CHIN UP"
         var titleText = _isMultiSet
             ? ("SET " + _setNumber + ": " + _exerciseName)
-            : (_exerciseName + " COMPLETE");
+            : (_exerciseName + " DONE");
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, (h * 0.12).toNumber(), Graphics.FONT_SMALL, titleText, Graphics.TEXT_JUSTIFY_CENTER);
 
@@ -45,20 +45,25 @@ class PullUpEditView extends WatchUi.View {
         var isPr = (_repCount > PullUpStorage.getPrSet());
         var repColor = isPr ? Graphics.COLOR_YELLOW : Graphics.COLOR_ORANGE;
         dc.setColor(repColor, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (h * 0.25).toNumber(), numFont, _repCount.toString(), Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.23).toNumber(), numFont, _repCount.toString(), Graphics.TEXT_JUSTIFY_CENTER);
 
-        // 3. Hints
+        // 3. Hints (bezel-safe stacked rows)
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (h * 0.60).toNumber(), Graphics.FONT_XTINY, "UP / DOWN to adjust", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.56).toNumber(), Graphics.FONT_XTINY, "UP / DOWN: Adjust Reps", Graphics.TEXT_JUSTIFY_CENTER);
 
+        dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, (h * 0.63).toNumber(), Graphics.FONT_XTINY, "Hold UP: Pull / Chin", Graphics.TEXT_JUSTIFY_CENTER);
 
-        var actionHint = _isMultiSet ? "START = Save & Rest  |  BACK = Discard" : "START = Save   BACK = Discard";
+        var saveHint = _isMultiSet ? "START: Save & Rest" : "START: Save";
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (h * 0.72).toNumber(), Graphics.FONT_XTINY, actionHint, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, (h * 0.71).toNumber(), Graphics.FONT_XTINY, saveHint, Graphics.TEXT_JUSTIFY_CENTER);
+
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, (h * 0.78).toNumber(), Graphics.FONT_XTINY, "BACK: Discard", Graphics.TEXT_JUSTIFY_CENTER);
 
         if (isPr) {
             dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, (h * 0.83).toNumber(), Graphics.FONT_XTINY, "* NEW RECORD CANDIDATE *", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(cx, (h * 0.85).toNumber(), Graphics.FONT_XTINY, "* NEW RECORD *", Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
@@ -72,7 +77,23 @@ class PullUpEditView extends WatchUi.View {
         }
     }
 
+    public function toggleExerciseType() as Void {
+        if (_exerciseName.equals("CHIN UP")) {
+            _exerciseName = "PULL UP";
+        } else {
+            _exerciseName = "CHIN UP";
+        }
+    }
+
     public function getRepCount() as Number {
         return _repCount;
+    }
+
+    public function getExerciseName() as String {
+        return _exerciseName;
+    }
+
+    public function isChinUp() as Boolean {
+        return _exerciseName.equals("CHIN UP");
     }
 }

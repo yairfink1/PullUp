@@ -7,7 +7,8 @@ import Toybox.ActivityRecording;
 // ---------------------------------------------------------------------------
 // PullUpEditDelegate - handles input on post-set confirmation screen.
 //
-// Supports both Single Quick Set and Multi-Set Workout modes.
+// Supports both Single Quick Set and Multi-Set Workout modes, including
+// holding UP (Menu) to reclassify between PULL UP and CHIN UP.
 // ---------------------------------------------------------------------------
 class PullUpEditDelegate extends WatchUi.BehaviorDelegate {
 
@@ -17,8 +18,10 @@ class PullUpEditDelegate extends WatchUi.BehaviorDelegate {
     private var _isMultiSet      as Boolean = false;
     private var _totalRepsField  as FitContributor.Field?;
     private var _lapRepsField    as FitContributor.Field?;
+    private var _pullRepsField   as FitContributor.Field?;
+    private var _chinRepsField   as FitContributor.Field?;
+    private var _lapExField      as FitContributor.Field?;
 
-    // Constructor for Multi-Set Workout mode.
     function initialize(
         editView        as PullUpEditView,
         session         as ActivityRecording.Session?,
@@ -44,6 +47,8 @@ class PullUpEditDelegate extends WatchUi.BehaviorDelegate {
             _editView.decrement();
             WatchUi.requestUpdate();
             return true;
+        } else if (key == WatchUi.KEY_MENU) {
+            return onMenu();
         } else if (key == WatchUi.KEY_ENTER || key == WatchUi.KEY_START) {
             return onSelect();
         } else if (key == WatchUi.KEY_ESC) {
@@ -66,33 +71,57 @@ class PullUpEditDelegate extends WatchUi.BehaviorDelegate {
         return true;
     }
 
+    // Hold UP / Menu toggles exercise type: PULL UP <-> CHIN UP.
+    function onMenu() as Boolean {
+        _editView.toggleExerciseType();
+        System.println("PullUpEditDelegate: Exercise toggled to " + _editView.getExerciseName());
+        WatchUi.requestUpdate();
+        return true;
+    }
+
     // Set developer fields for single set mode.
-    public function setFitFields(totalField as FitContributor.Field?, lapField as FitContributor.Field?) as Void {
+    public function setFitFields(
+        totalField as FitContributor.Field?,
+        lapField   as FitContributor.Field?,
+        pullField  as FitContributor.Field?,
+        chinField  as FitContributor.Field?,
+        lapExField as FitContributor.Field?
+    ) as Void {
         _totalRepsField = totalField;
         _lapRepsField   = lapField;
+        _pullRepsField  = pullField;
+        _chinRepsField  = chinField;
+        _lapExField     = lapExField;
     }
 
     // SELECT / START - Save set.
     function onSelect() as Boolean {
-        var reps = _editView.getRepCount();
+        var reps     = _editView.getRepCount();
+        var isChinUp = _editView.isChinUp();
 
         if (_isMultiSet && _multiDelegate != null) {
             WatchUi.popView(WatchUi.SLIDE_DOWN);
-            _multiDelegate.onSetConfirmed(reps);
+            _multiDelegate.onSetConfirmedWithType(reps, isChinUp);
         } else {
             // Single Quick Set mode.
-            // CRITICAL ORDER: write confirmed reps to both fields BEFORE stop().
-            // Field descriptors must remain alive (non-null) through save() —
-            // nulling them early causes the runtime to tear them down before
-            // the FIT file is serialized, removing the fields from the record.
+            // CRITICAL ORDER: write confirmed reps and exercise type to all fields BEFORE stop().
             if (_totalRepsField != null) {
                 _totalRepsField.setData(reps);
             }
             if (_lapRepsField != null) {
                 _lapRepsField.setData(reps);
             }
+            if (_pullRepsField != null) {
+                _pullRepsField.setData(isChinUp ? 0 : reps);
+            }
+            if (_chinRepsField != null) {
+                _chinRepsField.setData(isChinUp ? reps : 0);
+            }
+            if (_lapExField != null) {
+                _lapExField.setData(isChinUp ? 1 : 0);
+            }
 
-            System.println("PullUpEditDelegate: confirmed reps=" + reps + ", stopping session.");
+            System.println("PullUpEditDelegate: confirmed reps=" + reps + " (" + _editView.getExerciseName() + "), stopping session.");
 
             if (_session != null && _session.isRecording()) {
                 _session.stop();

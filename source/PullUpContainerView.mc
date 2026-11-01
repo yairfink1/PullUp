@@ -39,9 +39,24 @@ class PullUpContainerView extends WatchUi.View {
     private var _lastInteractionTime as Number = 0;
     private var _indicatorTimer      as Timer.Timer?;
 
+    // Cached stats so onUpdate never hits Storage during 60fps scroll animations
+    private var _cachedToday as Number = 0;
+    private var _cachedPrSet as Number = 0;
+    private var _cachedPrDay as Number = 0;
+    private var _cachedDays  as Array<Dictionary<Symbol, Object>> = [];
+
     function initialize() {
         View.initialize();
         _lastInteractionTime = System.getTimer();
+        refreshCachedStats();
+    }
+
+    // Re-reads persisted stats. Call whenever storage changes (not per frame).
+    public function refreshCachedStats() as Void {
+        _cachedToday = PullUpStorage.getTodayReps();
+        _cachedPrSet = PullUpStorage.getPrSet();
+        _cachedPrDay = PullUpStorage.getPrDay();
+        _cachedDays  = PullUpStorage.getRolling7Days();
     }
 
     function onLayout(dc as Graphics.Dc) as Void {
@@ -49,6 +64,7 @@ class PullUpContainerView extends WatchUi.View {
     }
 
     function onShow() as Void {
+        refreshCachedStats();
         resetIndicatorTimer();
         WatchUi.requestUpdate();
     }
@@ -58,6 +74,11 @@ class PullUpContainerView extends WatchUi.View {
             _indicatorTimer.stop();
             _indicatorTimer = null;
         }
+    }
+
+    // Cheap per-frame update: only refreshes the timestamp, never recreates the timer.
+    public function markInteraction() as Void {
+        _lastInteractionTime = System.getTimer();
     }
 
     public function resetIndicatorTimer() as Void {
@@ -200,10 +221,10 @@ class PullUpContainerView extends WatchUi.View {
             dc.drawText(cx, yOff + (h * 0.23).toNumber(), numFont, "0", Graphics.TEXT_JUSTIFY_CENTER);
 
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, yOff + (h * 0.57).toNumber(), Graphics.FONT_XTINY, "Press START to record", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(cx, yOff + (h * 0.57).toNumber(), Graphics.FONT_XTINY, "START to record", Graphics.TEXT_JUSTIFY_CENTER);
 
-            var today = PullUpStorage.getTodayReps();
-            var prSet = PullUpStorage.getPrSet();
+            var today = _cachedToday;
+            var prSet = _cachedPrSet;
             dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
             dc.drawText(cx, yOff + (h * 0.67).toNumber(), Graphics.FONT_TINY, "Today: " + today + " reps", Graphics.TEXT_JUSTIFY_CENTER);
 
@@ -213,7 +234,7 @@ class PullUpContainerView extends WatchUi.View {
             }
 
             dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, yOff + (h * 0.86).toNumber(), Graphics.FONT_XTINY, "DOWN = Multi-Set Workout", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(cx, yOff + (h * 0.85).toNumber(), Graphics.FONT_XTINY, "DOWN for Multi-Set", Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
@@ -236,7 +257,7 @@ class PullUpContainerView extends WatchUi.View {
             dc.drawText(cx, yOff + (h * 0.62).toNumber(), Graphics.FONT_MEDIUM, _multiTimeText, Graphics.TEXT_JUSTIFY_CENTER);
 
             dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, yOff + (h * 0.78).toNumber(), Graphics.FONT_XTINY, "Total: " + _multiTotalReps + " | " + _multiSampleText, Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(cx, yOff + (h * 0.78).toNumber(), Graphics.FONT_XTINY, "Total: " + _multiTotalReps + " reps", Graphics.TEXT_JUSTIFY_CENTER);
         } else {
             dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(cx, yOff + (h * 0.09).toNumber(), Graphics.FONT_SMALL, "MULTI-SET", Graphics.TEXT_JUSTIFY_CENTER);
@@ -247,12 +268,12 @@ class PullUpContainerView extends WatchUi.View {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
             dc.drawText(cx, yOff + (h * 0.55).toNumber(), Graphics.FONT_XTINY, "Ready for Set " + _multiSetNum, Graphics.TEXT_JUSTIFY_CENTER);
 
-            var today = PullUpStorage.getTodayReps();
+            var today = _cachedToday;
             dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
             dc.drawText(cx, yOff + (h * 0.67).toNumber(), Graphics.FONT_TINY, "Today: " + today + " reps", Graphics.TEXT_JUSTIFY_CENTER);
 
             dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, yOff + (h * 0.86).toNumber(), Graphics.FONT_XTINY, "DOWN = 7-Day History", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(cx, yOff + (h * 0.85).toNumber(), Graphics.FONT_XTINY, "DOWN for History", Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
@@ -260,7 +281,7 @@ class PullUpContainerView extends WatchUi.View {
     private function renderHistory(dc as Graphics.Dc, cx as Number, yOff as Number) as Void {
         var w = dc.getWidth();
         var h = dc.getHeight();
-        var daysData  = PullUpStorage.getRolling7Days();
+        var daysData  = _cachedDays;
         var weekTotal = 0;
         var maxReps   = 0;
         var numDays   = daysData.size();
@@ -274,8 +295,8 @@ class PullUpContainerView extends WatchUi.View {
         }
 
         var avgReps = (numDays > 0) ? ((weekTotal + 3) / numDays) : 0;
-        var prDay = PullUpStorage.getPrDay();
-        var prSet = PullUpStorage.getPrSet();
+        var prDay = _cachedPrDay;
+        var prSet = _cachedPrSet;
 
         // Title & Average
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
@@ -360,11 +381,11 @@ class PullUpContainerView extends WatchUi.View {
         // All-time PR badge banner
         if (prSet > 0 || prDay > 0) {
             dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, yOff + (h * 0.74).toNumber(), Graphics.FONT_XTINY, "PRs: Set " + prSet + " | Day " + prDay, Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(cx, yOff + (h * 0.74).toNumber(), Graphics.FONT_XTINY, "PR Set " + prSet + " | Day " + prDay, Graphics.TEXT_JUSTIFY_CENTER);
         }
 
         // Navigation Hint
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, yOff + (h * 0.86).toNumber(), Graphics.FONT_XTINY, "UP = Multi-Set", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, yOff + (h * 0.85).toNumber(), Graphics.FONT_XTINY, "UP for Multi-Set", Graphics.TEXT_JUSTIFY_CENTER);
     }
 }
