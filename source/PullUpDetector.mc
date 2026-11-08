@@ -1222,30 +1222,45 @@ class PullUpDetector {
             return nConfirmed;
         }
 
-        // Bounded early-exit: When nBase == nPost == nConfirmed, Step 7 only performs 7a (double-cadence gap rescue).
-        // If there are no wide gaps >= 1.85 * medCadence, we can completely bypass the second peak-finding pass!
+        _sortIntArray(confirmedReps, nConfirmed);
+
+        var i      = 0;
+        var j      = 0;
+        var need7a = false;
+        var need7b = false;
+        var need7c = ((nPost - nBase) >= 4 && nConfirmed >= 15);
+
         if (nBase == nPost && nConfirmed == nBase) {
             var loThreshold = (1.85 * medCadence).toNumber();
             if (loThreshold < 200) { loThreshold = 200; }
-            var hasCandidateGap = false;
-            for (var gi = 1; gi < nConfirmed; gi++) {
-                if ((confirmedReps[gi] - confirmedReps[gi - 1]) >= loThreshold) {
-                    hasCandidateGap = true;
+            var hiThreshold = (2.45 * medCadence).toNumber();
+            for (i = 1; i < nConfirmed; i++) {
+                var gCheck = confirmedReps[i] - confirmedReps[i - 1];
+                if (gCheck >= loThreshold && gCheck <= hiThreshold) {
+                    need7a = true;
                     break;
                 }
             }
-            if (!hasCandidateGap) {
-                return nConfirmed;
+        }
+
+        if (nConfirmed >= 8 && nBase <= nPost) {
+            var lastCheck = confirmedReps[nConfirmed - 1];
+            if ((departureSample - 80) > (lastCheck + 200)) {
+                need7b = true;
+            } else if (nPost > nConfirmed && nConfirmed >= 2 && (lastCheck - confirmedReps[nConfirmed - 2]) >= 300) {
+                need7b = true;
             }
+        }
+
+        // Fast bypass: skip the second _findPeaksExtrema pass when no 7a, 7b, or 7c gap condition is active.
+        if (!need7a && !need7b && !need7c) {
+            return nConfirmed;
         }
 
         var rawK    = new Array<Number>[MAX_EXTREMA];
         var rawProm = new Array<Number>[MAX_EXTREMA];
         var nRaw    = _findPeaksExtrema(sign, 65, 35 * 1225, rawK, rawProm);
-        _sortIntArray(confirmedReps, nConfirmed);
 
-        var i      = 0;
-        var j      = 0;
         var midLo  = 0;
         var midHi  = 0;
         var rk     = 0;
@@ -1285,7 +1300,7 @@ class PullUpDetector {
         }
 
         // 7b. Late-set deep-fatigue struggle rescue.
-        if (nConfirmed >= 14 && nBase <= nPost) {
+        if (nConfirmed >= 8 && nBase <= nPost) {
             var lastC = confirmedReps[nConfirmed - 1];
             if (nPost > nConfirmed && nConfirmed >= 2) {
                 var prevC = confirmedReps[nConfirmed - 2];
@@ -1313,7 +1328,7 @@ class PullUpDetector {
                 rk   = rawK[j];
                 gIdx = sIdx + _extOffsets[rk];
                 if (gIdx > (lastC + 200) && gIdx < (departureSample - 80)) {
-                    if (rawProm[j] >= (180 * 1225) && _extMaxX60[rk] <= -500) {
+                    if (rawProm[j] >= (170 * 1225) && _extMaxX60[rk] <= -500) {
                         if (_extMaxEnv35[rk] >= 35 && nConfirmed < MAX_BASE_REPS) {
                             confirmedReps[nConfirmed] = gIdx;
                             nConfirmed++;
@@ -1420,17 +1435,6 @@ class PullUpDetector {
         _consensusDone = true;
 
         var n = _sampleCount;
-
-        // Long-Set Watchdog Protection:
-        // On sets longer than ~28 seconds (_sampleCount >= 2800 at 100 Hz), the online detector has already
-        // reliably tracked all reps in real time with cadence and physiological fatigue floors.
-        // Running the second zero-phase topographic prominence pass over >2,800 samples exceeds Connect IQ's
-        // synchronous callback execution budget (Watchdog Tripped Error). Bypassing consensus keeps the set 100% safe.
-        if (n >= 2800) {
-            System.println("PullUpDetector: Set duration (" + n + " samples >= 28.0s) qualifies as long set - preserving online base reps (" + _repCount + ")");
-            return;
-        }
-
         var i = 0;
         var j = 0;
         if (_cHasHung && _cDismountIdx < 0) {
@@ -1482,10 +1486,29 @@ class PullUpDetector {
         var departureSample = (_cHasHung && _cDepSample >= 0) ? _cDepSample : n;
 
         // Step 2: Bipartite greedy matching within +/- 100 samples (1.00s).
+        // Pre-collect only candidate pairs with |baseReps[i] - postReps[j]| <= 100 to avoid O(N^3) rescans.
         var matchedB = new Array<Boolean>[nBase];
         var matchedP = new Array<Boolean>[nPost];
         for (i = 0; i < nBase; i++) { matchedB[i] = false; }
         for (i = 0; i < nPost; i++) { matchedP[i] = false; }
+
+        var pairBi   = new Array<Number>[128];
+        var pairPi   = new Array<Number>[128];
+        var pairDist = new Array<Number>[128];
+        var nPairs   = 0;
+        for (i = 0; i < nBase; i++) {
+            var bVal = baseReps[i];
+            for (j = 0; j < nPost; j++) {
+                var diffBP = postReps[j] - bVal;
+                if (diffBP > 100) { break; }
+                if (diffBP >= -100 && nPairs < 128) {
+                    pairBi[nPairs]   = i;
+                    pairPi[nPairs]   = j;
+                    pairDist[nPairs] = (diffBP < 0) ? -diffBP : diffBP;
+                    nPairs++;
+                }
+            }
+        }
 
         var confirmedReps       = new Array<Number>[MAX_BASE_REPS];
         var confirmedPostCoords = new Array<Number>[MAX_BASE_REPS];
@@ -1493,29 +1516,25 @@ class PullUpDetector {
 
         while (true) {
             var bestDist = 101;
-            var bestBi   = -1;
-            var bestPi   = -1;
-            for (i = 0; i < nBase; i++) {
-                if (matchedB[i]) { continue; }
-                for (j = 0; j < nPost; j++) {
-                    if (matchedP[j]) { continue; }
-                    var d = baseReps[i] - postReps[j];
-                    if (d < 0) { d = -d; }
-                    if (d <= 100 && d < bestDist) {
-                        bestDist = d;
-                        bestBi   = i;
-                        bestPi   = j;
-                    }
+            var bestPair = -1;
+            for (i = 0; i < nPairs; i++) {
+                var pbi = pairBi[i];
+                var ppi = pairPi[i];
+                if (!matchedB[pbi] && !matchedP[ppi] && pairDist[i] < bestDist) {
+                    bestDist = pairDist[i];
+                    bestPair = i;
                 }
             }
-            if (bestBi < 0) {
+            if (bestPair < 0) {
                 break;
             }
-            matchedB[bestBi] = true;
-            matchedP[bestPi] = true;
+            var winBi = pairBi[bestPair];
+            var winPi = pairPi[bestPair];
+            matchedB[winBi] = true;
+            matchedP[winPi] = true;
             if (nConfirmed < MAX_BASE_REPS) {
-                confirmedReps[nConfirmed]       = baseReps[bestBi];
-                confirmedPostCoords[nConfirmed] = postReps[bestPi];
+                confirmedReps[nConfirmed]       = baseReps[winBi];
+                confirmedPostCoords[nConfirmed] = postReps[winPi];
                 nConfirmed++;
             }
         }
@@ -1552,10 +1571,13 @@ class PullUpDetector {
         if (minSpacing < 75) { minSpacing = 75; }
         var minSpacingStep4 = minSpacing;
 
-        if (nPost <= 6 && nBase == (nPost + 1) && nMatchedPairs == nPost && nConfirmed >= 2) {
-            var candStep = (0.72 * _calcSortedCadence(confirmedReps, nConfirmed)).toNumber();
-            if (candStep > minSpacingStep4) {
-                minSpacingStep4 = candStep;
+        if (nPost <= 6 && nBase == (nPost + 1) && nConfirmed >= 3) {
+            var medConf = _calcSortedCadence(confirmedReps, nConfirmed);
+            if (medConf <= 280.0) {
+                var candStep = (0.72 * medConf).toNumber();
+                if (candStep > minSpacingStep4) {
+                    minSpacingStep4 = candStep;
+                }
             }
         }
 
@@ -1626,7 +1648,8 @@ class PullUpDetector {
                 }
             }
             if (nConfirmed > 0 && p < minConfirmed) {
-                if (_extMaxEnv35[extK] < 90) {
+                var isPreRepDropout = ((nPost - nBase) >= 2) && ((minConfirmed - p) >= 180);
+                if (!isPreRepDropout && _extMaxEnv35[extK] < 90) {
                     continue;
                 }
             }
@@ -1644,7 +1667,7 @@ class PullUpDetector {
 
             var dtCloseP  = _minDistToSet(p, confirmedReps, nConfirmed);
             var spacingOk = (dtCloseP >= effSpacing);
-            if (!spacingOk && dtCloseP >= 84 && nPost > nBase && nConfirmed > 0) {
+            if (!spacingOk && dtCloseP >= 75 && nPost > nBase && nConfirmed > 0) {
                 var rPrev = -1;
                 var pPrev = -1;
                 var rNext = 999999;

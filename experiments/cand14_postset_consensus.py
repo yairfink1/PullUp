@@ -135,14 +135,14 @@ def detect_with_channels(
 
     min_spacing = max(75, int(min_spacing_cadence * med_cadence))
 
-    # When all post_reps are 1-to-1 matched (len(matched_pairs) == len(post_reps)) on a short set
-    # (len(post_reps) <= 6) with 1 extra unmatched_base trigger, compute Step 4 spacing from
-    # confirmed_reps so the extra trigger does not split an interval and bias cadence downward.
+    # When base_reps == post_reps + 1 on a short set (len(post_reps) <= 6),
+    # compute Step 4 spacing from confirmed_reps so unmatched double triggers do not corrupt cadence downward.
     min_spacing_step4 = min_spacing
-    if len(post_reps) <= 6 and len(base_reps) == len(post_reps) + 1 and len(matched_pairs) == len(post_reps) and len(confirmed_reps) >= 2:
+    if len(post_reps) <= 6 and len(base_reps) == len(post_reps) + 1 and len(confirmed_reps) >= 3:
         conf_sorted = sorted(confirmed_reps)
         med_conf = float(np.median([conf_sorted[k] - conf_sorted[k-1] for k in range(1, len(conf_sorted))]))
-        min_spacing_step4 = max(min_spacing, int(min_spacing_cadence * med_conf))
+        if med_conf <= 280.0:
+            min_spacing_step4 = max(min_spacing, int(min_spacing_cadence * med_conf))
 
     # 4. Handle unmatched baseline triggers
     for b in unmatched_base:
@@ -196,8 +196,10 @@ def detect_with_channels(
             if np.max(envs[max(0, p - 35):min(n, p + 35)]) < 62:
                 continue
         # Reject early mount-settling oscillation before Rep 1 unless strong pull envelope (>= 90 mG)
+        # or genuine pre-rep rhythmic cadence dropout (post_reps - base_reps >= 2 and min(confirmed_reps) - p >= 180).
         if confirmed_reps and p < min(confirmed_reps):
-            if np.max(envs[max(0, p - 35):min(n, p + 35)]) < 90:
+            is_pre_rep_dropout = (len(post_reps) - len(base_reps) >= 2) and ((min(confirmed_reps) - p) >= 180)
+            if not is_pre_rep_dropout and np.max(envs[max(0, p - 35):min(n, p + 35)]) < 90:
                 continue
         # If both channels already agreed on count, only allow internal gap recovery on < 7 rep sets
         if already_agreed and (p > last_confirmed or len(base_reps) >= 7):
@@ -217,7 +219,7 @@ def detect_with_channels(
         # slightly below eff_spacing due to concentric-vs-Y-peak phase offset, check Y-peak-to-Y-peak
         # spacing inside a genuine 2-rep dropout gap (p_next - p_prev >= max(242, 1.75 * med_cadence)).
         spacing_ok = (dt_close >= eff_spacing)
-        if not spacing_ok and dt_close >= 84 and len(post_reps) > len(base_reps) and confirmed_reps:
+        if not spacing_ok and dt_close >= 75 and len(post_reps) > len(base_reps) and confirmed_reps:
             less = [r for r in confirmed_reps if r < p]
             greater = [r for r in confirmed_reps if r > p]
             if less and greater:
@@ -313,8 +315,8 @@ def detect_with_channels(
                                     confirmed_reps.sort()
                                     break
 
-        # (b) Late slow-burnout rep before dismount on high-volume sets (>= 14 reps)
-        if len(confirmed_reps) >= 14 and len(base_reps) <= len(post_reps):
+        # (b) Late slow-burnout rep before dismount on volume sets (>= 8 reps)
+        if len(confirmed_reps) >= 8 and len(base_reps) <= len(post_reps):
             last_c = confirmed_reps[-1]
             # If post_reps > confirmed_reps (e.g. `10-19-16-24-49` where post_reps=16 > base_reps=15),
             # check if there is a wide gap (>= 300 samples) before last_c containing a prominent Y-wave peak
@@ -336,7 +338,7 @@ def detect_with_channels(
                 g_idx = int(s_idx + p_off)
                 if g_idx > last_c + 200 and g_idx < (departure_sample - 80):
                     # Must remain in solid dead-hang without releasing the bar (max X <= -500 in 60 samples)
-                    if prom >= 180.0 and np.max(x[g_idx:min(n, g_idx + 60)]) <= -500:
+                    if prom >= 170.0 and np.max(x[g_idx:min(n, g_idx + 60)]) <= -500:
                         if np.max(envs[max(0, g_idx - 35):min(n, g_idx + 35)]) >= 35:
                             confirmed_reps.append(g_idx)
                             added_reps.append(g_idx)

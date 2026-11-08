@@ -605,11 +605,8 @@ def evaluate_dataset(dataset: List[Dict[str, Any]],
             mount_exit_env=mount_exit_env
         )
         if "df" in item and item["df"] is not None:
-            # Long-Set Watchdog Protection (matches Monkey C PullUpDetector):
-            # On sets longer than ~28 seconds (len(df) >= 2800 at 100 Hz), consensus pass is bypassed.
-            if len(item["df"]) < 2800:
-                import experiments.cand14_postset_consensus as cand14
-                rep_indices, _, _, _, _, _ = cand14.detect_with_channels(item["df"])
+            import experiments.cand14_postset_consensus as cand14
+            rep_indices, _, _, _, _, _ = cand14.detect_with_channels(item["df"])
         detected_count = len(rep_indices)
         true_count = item["true_reps"]
         err = detected_count - true_count
